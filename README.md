@@ -31,3 +31,5 @@ import { OceanEngine } from "./src";
 
 const engine = new OceanEngine(canvas, [{ kind: "hammerhead", size: 1 }]);
 ```
+
+MIT
