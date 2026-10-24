@@ -345,6 +345,8 @@ export class AsciiRenderer {
   }
 
   resize(width: number, height: number, dpr: number) {
+    const prevCols = this.cols;
+    const prevRows = this.rows;
     this.width = width;
     this.height = height;
     this.dpr = dpr;
@@ -359,21 +361,23 @@ export class AsciiRenderer {
     this.bg.height = this.canvas.height;
 
     const n = this.cols * this.rows;
-    this.dotKind = new Uint8Array(n);
-    this.dotPhase = new Float32Array(n);
-    this.dotFreq = new Float32Array(n);
-    this.energy = new Float32Array(n);
-    this.energyTmp = new Float32Array(n);
-    this.heat = new Float32Array(n);
-    this.bucketOf = new Uint8Array(n);
-    this.bucketOrder = new Int32Array(n);
-    this.sharkFlag = new Uint8Array(n);
-    this.sharkShade = new Float32Array(n);
-    this.sharkKey = new Uint32Array(n);
-    this.sharkDepth = new Float32Array(n);
-    this.sharkKind = new Uint8Array(n);
-    this.sharkShadow = new Uint8Array(n);
-    this.fishStamp = new Uint32Array(n);
+    if (this.cols !== prevCols || this.rows !== prevRows) {
+      this.dotKind = new Uint8Array(n);
+      this.dotPhase = new Float32Array(n);
+      this.dotFreq = new Float32Array(n);
+      this.energy = new Float32Array(n);
+      this.energyTmp = new Float32Array(n);
+      this.heat = new Float32Array(n);
+      this.bucketOf = new Uint8Array(n);
+      this.bucketOrder = new Int32Array(n);
+      this.sharkFlag = new Uint8Array(n);
+      this.sharkShade = new Float32Array(n);
+      this.sharkKey = new Uint32Array(n);
+      this.sharkDepth = new Float32Array(n);
+      this.sharkKind = new Uint8Array(n);
+      this.sharkShadow = new Uint8Array(n);
+      this.fishStamp = new Uint32Array(n);
+    }
 
     for (let i = 0; i < n; i++) {
       const col = i % this.cols;
