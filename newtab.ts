@@ -49,11 +49,7 @@ const kinds: [SharkKind, string][] = [
 // Rough look of the built-in tints, shown in the colour picker until one is chosen.
 const builtInColors = ["#3ad0e6", "#c25ae6", "#e6a038", "#4ad874"];
 const defaultOcean = (): Ocean => ({
-  sharks: DEFAULT_SHARKS.map(s => ({ ...s, color: null })),
-  fishScale: 1,
-  glyphScale: 0.6,
-  speed: 1,
-  theme: "dark",
+  sharks: DEFAULT_SHARKS.map(s => ({ ...s, color: null })), fishScale: 1, glyphScale: 0.6, speed: 1, theme: "dark",
 });
 let ocean = defaultOcean();
 let engine: OceanEngine | undefined;
@@ -83,11 +79,7 @@ function applyTheme() {
 }
 lightQuery.addEventListener("change", applyTheme);
 for (const button of document.querySelectorAll<HTMLButtonElement>("[data-theme-choice]")) {
-  button.addEventListener("click", () => {
-    ocean.theme = button.dataset.themeChoice as Theme;
-    applyTheme();
-    changeOcean(false);
-  });
+  button.addEventListener("click", () => { ocean.theme = button.dataset.themeChoice as Theme; applyTheme(); changeOcean(false); });
 }
 
 // Native <select> popups can't be styled, so the kind picker is a popover listbox.
@@ -98,9 +90,7 @@ listbox.popover = "auto";
 document.querySelector("#ocean-panel")!.append(listbox);
 let listboxOwner: HTMLButtonElement | null = null;
 listbox.addEventListener("toggle", (event: any) => {
-  if (event.newState !== "closed") return;
-  listboxOwner?.setAttribute("aria-expanded", "false");
-  listboxOwner = null;
+  if (event.newState === "closed") { listboxOwner?.setAttribute("aria-expanded", "false"); listboxOwner = null; }
 });
 function dropdown(value: SharkKind, onPick: (kind: SharkKind) => void) {
   const button = document.createElement("button");
@@ -148,34 +138,9 @@ const sharkList = document.querySelector<HTMLElement>("#shark-list")!;
 const sharkAdd = document.querySelector<HTMLButtonElement>("#shark-add")!;
 // set() returns whether the ocean has to be rebuilt.
 const sliders = [
-  {
-    id: "speed",
-    get: () => ocean.speed,
-    set: (v: number) => {
-      ocean.speed = v;
-      if (engine) engine.speed = v;
-      return false;
-    },
-    label: (v: number) => `${+v.toFixed(2)}×`,
-  },
-  {
-    id: "glyph-scale",
-    get: () => ocean.glyphScale,
-    set: (v: number) => {
-      ocean.glyphScale = v;
-      return true;
-    },
-    label: (v: number) => `${Math.round(v * 100)}%`,
-  },
-  {
-    id: "fish-scale",
-    get: () => ocean.fishScale,
-    set: (v: number) => {
-      ocean.fishScale = v;
-      return true;
-    },
-    label: (v: number) => `${Math.round(v * 100)}%`,
-  },
+  { id: "speed", get: () => ocean.speed, set: (v: number) => { ocean.speed = v; if (engine) engine.speed = v; return false; }, label: (v: number) => `${+v.toFixed(2)}×` },
+  { id: "glyph-scale", get: () => ocean.glyphScale, set: (v: number) => { ocean.glyphScale = v; return true; }, label: (v: number) => `${Math.round(v * 100)}%` },
+  { id: "fish-scale", get: () => ocean.fishScale, set: (v: number) => { ocean.fishScale = v; return true; }, label: (v: number) => `${Math.round(v * 100)}%` },
 ].map(s => ({
   ...s,
   input: document.querySelector<HTMLInputElement>(`#${s.id}`)!,
@@ -237,22 +202,13 @@ function renderOcean() {
     button.setAttribute("aria-checked", String(button.dataset.themeChoice === ocean.theme));
   }
 }
-sharkAdd.addEventListener("click", () => {
-  ocean.sharks.push({ kind: "classic", size: 0.8, color: null });
-  changeOcean();
-});
-document.querySelector("#ocean-reset")!.addEventListener("click", () => {
-  ocean = { ...defaultOcean(), theme: ocean.theme };
-  changeOcean();
-});
+sharkAdd.addEventListener("click", () => { ocean.sharks.push({ kind: "classic", size: 0.8, color: null }); changeOcean(); });
+document.querySelector("#ocean-reset")!.addEventListener("click", () => { ocean = { ...defaultOcean(), theme: ocean.theme }; changeOcean(); });
 
 load<Partial<Ocean>>(oceanKey).then(saved => {
   const known = new Set(kinds.map(([k]) => k));
   const num = (v: unknown, fallback: number) => typeof v === "number" && isFinite(v) ? v : fallback;
-  const validSharks = Array.isArray(saved?.sharks)
-    && saved.sharks.length > 0
-    && saved.sharks.every(s => known.has(s?.kind) && typeof s.size === "number");
-  if (saved && validSharks) {
+  if (saved && Array.isArray(saved.sharks) && saved.sharks.length && saved.sharks.every(s => known.has(s?.kind) && typeof s.size === "number")) {
     const base = defaultOcean();
     ocean = {
       sharks: saved.sharks.slice(0, 8),
@@ -269,21 +225,11 @@ load<Partial<Ocean>>(oceanKey).then(saved => {
 
 // Top-right menus.
 const apps = [
-  ["搜尋", "https://www.google.com/"],
-  ["地圖", "https://maps.google.com/"],
-  ["YouTube", "https://www.youtube.com/"],
-  ["Gmail", "https://mail.google.com/"],
-  ["Meet", "https://meet.google.com/"],
-  ["雲端硬碟", "https://drive.google.com/"],
-  ["日曆", "https://calendar.google.com/"],
-  ["翻譯", "https://translate.google.com/"],
-  ["相簿", "https://photos.google.com/"],
-  ["文件", "https://docs.google.com/document/"],
-  ["試算表", "https://docs.google.com/spreadsheets/"],
-  ["簡報", "https://docs.google.com/presentation/"],
-  ["Gemini", "https://gemini.google.com/"],
-  ["Keep", "https://keep.google.com/"],
-  ["新聞", "https://news.google.com/"],
+  ["搜尋", "https://www.google.com/"], ["地圖", "https://maps.google.com/"], ["YouTube", "https://www.youtube.com/"],
+  ["Gmail", "https://mail.google.com/"], ["Meet", "https://meet.google.com/"], ["雲端硬碟", "https://drive.google.com/"],
+  ["日曆", "https://calendar.google.com/"], ["翻譯", "https://translate.google.com/"], ["相簿", "https://photos.google.com/"],
+  ["文件", "https://docs.google.com/document/"], ["試算表", "https://docs.google.com/spreadsheets/"], ["簡報", "https://docs.google.com/presentation/"],
+  ["Gemini", "https://gemini.google.com/"], ["Keep", "https://keep.google.com/"], ["新聞", "https://news.google.com/"],
 ];
 const appsPanel = document.querySelector<HTMLElement>("#apps")!;
 for (const [name, url] of apps) {
@@ -299,20 +245,9 @@ for (const [name, url] of apps) {
   appsPanel.append(a);
 }
 
-const menus = [
-  ["#apps-button", "#apps"],
-  ["#avatar-button", "#account"],
-  ["#ocean-button", "#ocean-panel"],
-].map(([button, panel]) => [
-  document.querySelector<HTMLElement>(button)!,
-  document.querySelector<HTMLElement>(panel)!,
-] as const);
+const menus = [["#apps-button", "#apps"], ["#avatar-button", "#account"], ["#ocean-button", "#ocean-panel"]].map(([b, p]) => [document.querySelector<HTMLElement>(b)!, document.querySelector<HTMLElement>(p)!] as const);
 function closeMenus(except?: HTMLElement) {
-  for (const [button, panel] of menus) {
-    if (panel === except) continue;
-    panel.hidden = true;
-    button.setAttribute("aria-expanded", "false");
-  }
+  for (const [button, panel] of menus) if (panel !== except) { panel.hidden = true; button.setAttribute("aria-expanded", "false"); }
 }
 for (const [button, panel] of menus) button.addEventListener("click", event => {
   event.stopPropagation();
@@ -338,10 +273,7 @@ function showAvatar(src: string | undefined) {
 }
 const avatarFile = document.querySelector<HTMLInputElement>("#avatar-file")!;
 document.querySelector("#avatar-change")!.addEventListener("click", () => avatarFile.click());
-document.querySelector("#avatar-clear")!.addEventListener("click", () => {
-  store(avatarKey, null);
-  showAvatar(undefined);
-});
+document.querySelector("#avatar-clear")!.addEventListener("click", () => { store(avatarKey, null); showAvatar(undefined); });
 avatarFile.addEventListener("change", () => {
   const file = avatarFile.files?.[0];
   if (!file) return;
@@ -375,11 +307,7 @@ const nameInput = document.querySelector<HTMLInputElement>("#link-name")!;
 const urlInput = document.querySelector<HTMLInputElement>("#link-url")!;
 const deleteButton = document.querySelector<HTMLButtonElement>("#delete")!;
 document.querySelector("#cancel")!.addEventListener("click", () => editor.close());
-deleteButton.addEventListener("click", () => {
-  links = links.filter((_, i) => i !== editing);
-  save();
-  editor.close();
-});
+deleteButton.addEventListener("click", () => { links = links.filter((_, i) => i !== editing); save(); editor.close(); });
 
 function open(index: number) {
   editing = index;
@@ -442,10 +370,7 @@ form.addEventListener("submit", event => {
 });
 
 function valid(saved: unknown): saved is Shortcut[] {
-  return Array.isArray(saved) && saved.every(x =>
-    typeof x?.name === "string"
-    && typeof x?.url === "string"
-    && /^https?:\/\//i.test(x.url));
+  return Array.isArray(saved) && saved.every(x => typeof x?.name === "string" && typeof x?.url === "string" && /^https?:\/\//i.test(x.url));
 }
 render();
 load<unknown>(key).then(saved => { if (valid(saved)) { links = saved; render(); } });
