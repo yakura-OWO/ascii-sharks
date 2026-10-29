@@ -1,6 +1,5 @@
-
-本專安完全由 claude 及 codex 開發
-# ascii sharks
+[English](README.md) | [繁體中文](README.zh-TW.md)
+# ASCII Sharks
 
 ```
                             ;'
@@ -22,46 +21,71 @@ t'                            ''XSSS8SSX%XX8#.    %XSX%
                             .
 ```
 
-把彩色 ASCII 鯊魚海洋變成 Chrome 新分頁。
+A Chrome new tab extension based on [stackedlol/ascii-sharks](https://github.com/stackedlol/ascii-sharks), bringing animated ASCII sharks and fish to your new tab background.
 
-Fork of [stackedlol/ascii-sharks](https://github.com/stackedlol/ascii-sharks) — the ASCII fish and shark engine (`src/`) is the original work; this fork wraps it in a Chrome new tab extension.
+Supports customizable shark appearances and animation settings.
 
-## 功能
+All settings are stored locally in your browser and are not uploaded to any external server by this project.
 
-- 動態 ASCII 鯊魚與魚群背景，點擊會激起水波
-- 半透明搜尋框（Google 搜尋，或直接輸入網址）
-- 可新增、編輯、移除的捷徑（預設為空）
-- Google 應用程式選單、可自訂頭像
-- 右下角「自訂」：淺色／深色／跟隨系統、游動速度、字元大小、小魚數量，以及每隻鯊魚的種類、大小、顏色
+## Installation
 
-所有設定只存在你自己的瀏覽器（`chrome.storage.local`），不會上傳到任何地方。
+1. [Download the project ZIP](https://github.com/yakura-OWO/ascii-sharks/archive/refs/heads/main.zip) and extract it.
+2. Open Chrome and navigate to `chrome://extensions`.
+3. Enable **Developer mode** in the top-right corner.
+4. Click **Load unpacked**.
+5. Select the `extension` folder from the extracted project.
 
-## 安裝
+Once installed, open a new tab to start using it.
 
-1. 下載或 clone 這個 repo
-2. 開啟 `chrome://extensions`，打開右上角「開發人員模式」
-3. 按「載入未封裝項目」，選擇 `extension` 資料夾
+## Development
 
-Chrome 會在擴充功能換掉新分頁時於頁面下方顯示一條頁尾，可在「自訂 Chrome」側邊面板中關閉。
+Requires Node.js and npm.
 
-## 開發
-
-```sh
+```bash
+git clone https://github.com/yakura-OWO/ascii-sharks.git
+cd ascii-sharks
 npm install
-npm run dev     # 開發伺服器，新分頁頁面
-npm run build   # 打包到 extension/
+npm run dev
 ```
 
-修改 `index.html`、`newtab.ts`、`newtab.css`、`src/`、`public/` 後執行 `npm run build`，再到 `chrome://extensions` 重新載入。`extension/` 是打包結果，請勿直接修改。
+After making changes, run:
 
-原作者的展示頁在開發伺服器的 `/original-demo.html`，引擎用法：
-
-```ts
-import { OceanEngine } from "./src";
-
-const engine = new OceanEngine(canvas, [{ kind: "hammerhead", size: 1 }]);
+```bash
+npm run build
 ```
 
-## 授權
+The build output will be generated in `extension/`. Go back to `chrome://extensions` and reload the extension to apply your changes.
 
-MIT，見 [LICENSE](LICENSE)。原始引擎 © drewdi，新分頁擴充功能部分 © yakura-OWO。
+Main files:
+
+- `newtab.ts` — New tab functionality
+- `newtab.css` — Interface styles
+- `index.html` — Page structure
+- `src/` — Original ASCII animation engine
+- `public/` — Extension manifest and static files
+
+## Original Project
+
+This project is based on [stackedlol/ascii-sharks](https://github.com/stackedlol/ascii-sharks).
+
+- Original author: drewdi
+- Original repository: stackedlol/ascii-sharks
+- Original project: ASCII fish and shark animation engine
+- Additions in this fork: Chrome new tab interface, search, shortcuts, and customization options
+
+Thanks to the original author for making this project open source.
+
+## AI Development Disclosure
+
+The modifications and additional code in this project were generated with the assistance of **Anthropic Claude Code and OpenAI Codex**.
+
+The original ASCII animation engine comes from the open-source project mentioned above and was not created by the AI tools used in this fork.
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
+
+- Original code: Copyright © 2026 drewdi
+- Modifications and additions: Copyright © 2026 yakura-OWO
+
+The original copyright notices and MIT license must be retained when using, modifying, or redistributing this project.
