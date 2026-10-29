@@ -1,6 +1,4 @@
-import { OceanEngine } from "./src";
-
-new OceanEngine(document.querySelector("canvas")!);
+import { DEFAULT_SHARKS, OceanEngine, type SharkKind } from "./src";
 
 declare const chrome: any;
 const extension = typeof chrome !== "undefined" && !!chrome.storage?.local;
@@ -39,6 +37,98 @@ document.querySelector<HTMLFormElement>("#search")!.addEventListener("submit", e
   if (text) location.href = destination(text);
 });
 
+// Ocean: rebuilt from scratch whenever the settings change.
+type SharkSetting = { kind: SharkKind; size: number; color: string | null };
+type Ocean = { sharks: SharkSetting[]; fishScale: number; glyphScale: number };
+const oceanKey = "ascii-sharks-ocean";
+const kinds: [SharkKind, string][] = [
+  ["classic", "經典鯊"], ["hammerhead", "雙髻鯊"], ["greathammer", "大雙髻鯊"], ["tiger", "虎鯊"],
+  ["zebra", "斑馬鯊"], ["mako", "灰鯖鯊"], ["thresher", "長尾鯊"], ["nurse", "鉸口鯊"],
+];
+// Rough look of the built-in tints, shown in the colour picker until one is chosen.
+const builtInColors = ["#3ad0e6", "#c25ae6", "#e6a038", "#4ad874"];
+const defaultOcean = (): Ocean => ({ sharks: DEFAULT_SHARKS.map(s => ({ ...s, color: null })), fishScale: 1, glyphScale: 0.6 });
+let ocean = defaultOcean();
+let engine: OceanEngine | undefined;
+const canvas = document.querySelector("canvas")!;
+
+function startOcean() {
+  engine?.destroy();
+  engine = new OceanEngine(canvas, ocean.sharks.map(({ kind, size }) => ({ kind, size })), {
+    fishScale: ocean.fishScale,
+    glyphScale: ocean.glyphScale,
+    sharkColors: ocean.sharks.map(s => s.color),
+  });
+}
+function changeOcean() {
+  store(oceanKey, ocean);
+  renderOcean();
+  startOcean();
+}
+const sharkList = document.querySelector<HTMLElement>("#shark-list")!;
+const fishScale = document.querySelector<HTMLInputElement>("#fish-scale")!;
+const fishValue = document.querySelector<HTMLOutputElement>("#fish-value")!;
+const glyphScale = document.querySelector<HTMLInputElement>("#glyph-scale")!;
+const glyphValue = document.querySelector<HTMLOutputElement>("#glyph-value")!;
+const sharkAdd = document.querySelector<HTMLButtonElement>("#shark-add")!;
+function renderOcean() {
+  sharkList.replaceChildren();
+  ocean.sharks.forEach((shark, index) => {
+    const row = document.createElement("div");
+    row.className = "shark-row";
+    const kind = document.createElement("select");
+    kind.setAttribute("aria-label", "種類");
+    for (const [value, label] of kinds) kind.add(new Option(label, value, false, value === shark.kind));
+    kind.addEventListener("change", () => { shark.kind = kind.value as SharkKind; changeOcean(); });
+    const size = document.createElement("input");
+    size.type = "range";
+    size.min = "0.4"; size.max = "1.3"; size.step = "0.05";
+    size.value = String(shark.size);
+    size.title = size.ariaLabel = "大小";
+    size.addEventListener("change", () => { shark.size = Number(size.value); changeOcean(); });
+    const color = document.createElement("input");
+    color.type = "color";
+    color.value = shark.color ?? builtInColors[index % builtInColors.length];
+    color.title = color.ariaLabel = "顏色";
+    color.addEventListener("change", () => { shark.color = color.value; changeOcean(); });
+    const reset = document.createElement("button");
+    reset.type = "button";
+    reset.textContent = "↺";
+    reset.title = reset.ariaLabel = "恢復原色";
+    reset.disabled = shark.color === null;
+    reset.addEventListener("click", () => { shark.color = null; changeOcean(); });
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.textContent = "×";
+    remove.title = remove.ariaLabel = "移除這隻鯊魚";
+    remove.disabled = ocean.sharks.length <= 1;
+    remove.addEventListener("click", () => { ocean.sharks.splice(index, 1); changeOcean(); });
+    row.append(kind, size, color, reset, remove);
+    sharkList.append(row);
+  });
+  document.querySelector("#shark-count")!.textContent = `${ocean.sharks.length} / 8`;
+  sharkAdd.disabled = ocean.sharks.length >= 8;
+  fishScale.value = String(ocean.fishScale);
+  fishValue.textContent = `${Math.round(ocean.fishScale * 100)}%`;
+  glyphScale.value = String(ocean.glyphScale);
+  glyphValue.textContent = `${Math.round(ocean.glyphScale * 100)}%`;
+}
+sharkAdd.addEventListener("click", () => { ocean.sharks.push({ kind: "classic", size: 0.8, color: null }); changeOcean(); });
+fishScale.addEventListener("input", () => { fishValue.textContent = `${Math.round(Number(fishScale.value) * 100)}%`; });
+fishScale.addEventListener("change", () => { ocean.fishScale = Number(fishScale.value); changeOcean(); });
+glyphScale.addEventListener("input", () => { glyphValue.textContent = `${Math.round(Number(glyphScale.value) * 100)}%`; });
+glyphScale.addEventListener("change", () => { ocean.glyphScale = Number(glyphScale.value); changeOcean(); });
+document.querySelector("#ocean-reset")!.addEventListener("click", () => { ocean = defaultOcean(); changeOcean(); });
+
+load<Ocean>(oceanKey).then(saved => {
+  const known = new Set(kinds.map(([k]) => k));
+  if (saved && Array.isArray(saved.sharks) && saved.sharks.length && saved.sharks.every(s => known.has(s?.kind) && typeof s.size === "number")) {
+    ocean = { sharks: saved.sharks.slice(0, 8), fishScale: typeof saved.fishScale === "number" ? saved.fishScale : 1, glyphScale: typeof saved.glyphScale === "number" ? saved.glyphScale : 0.6 };
+  }
+  renderOcean();
+  startOcean();
+});
+
 // Top-right menus.
 const apps = [
   ["搜尋", "https://www.google.com/"], ["地圖", "https://maps.google.com/"], ["YouTube", "https://www.youtube.com/"],
@@ -61,7 +151,7 @@ for (const [name, url] of apps) {
   appsPanel.append(a);
 }
 
-const menus = [["#apps-button", "#apps"], ["#avatar-button", "#account"]].map(([b, p]) => [document.querySelector<HTMLElement>(b)!, document.querySelector<HTMLElement>(p)!] as const);
+const menus = [["#apps-button", "#apps"], ["#avatar-button", "#account"], ["#ocean-button", "#ocean-panel"]].map(([b, p]) => [document.querySelector<HTMLElement>(b)!, document.querySelector<HTMLElement>(p)!] as const);
 function closeMenus(except?: HTMLElement) {
   for (const [button, panel] of menus) if (panel !== except) { panel.hidden = true; button.setAttribute("aria-expanded", "false"); }
 }
@@ -71,7 +161,10 @@ for (const [button, panel] of menus) button.addEventListener("click", event => {
   panel.hidden = !panel.hidden;
   button.setAttribute("aria-expanded", String(!panel.hidden));
 });
-document.addEventListener("click", event => { if (!(event.target as Element).closest(".panel")) closeMenus(); });
+// composedPath, not target.closest: panel controls re-render and may already be detached here.
+document.addEventListener("click", event => {
+  if (!event.composedPath().some(el => el instanceof Element && el.classList.contains("panel"))) closeMenus();
+});
 document.addEventListener("keydown", event => { if (event.key === "Escape") closeMenus(); });
 
 const avatarKey = "ascii-sharks-avatar";

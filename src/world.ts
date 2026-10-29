@@ -24,7 +24,7 @@ export type SharkKind = "classic" | "hammerhead" | "zebra" | "tiger" | "greatham
 export type SharkSpec = { kind: SharkKind; size: number };
 
 // The landing hero: four of the same shark at different depths.
-const DEFAULT_SHARKS: SharkSpec[] = [
+export const DEFAULT_SHARKS: SharkSpec[] = [
   { kind: "classic", size: 1 },
   { kind: "classic", size: 0.7 },
   { kind: "classic", size: 0.84 },
@@ -112,6 +112,8 @@ export class World {
   constructor(
     private sharkSpecs: SharkSpec[] = DEFAULT_SHARKS,
     private fishCount?: number,
+    /** Multiplies the area-based population. */
+    private fishScale = 1,
   ) {}
 
   resize(width: number, height: number, cellW: number, cellH: number) {
@@ -177,7 +179,7 @@ export class World {
     // Smaller (farther) sharks draw first so the big one swims over them.
     this.sharks.sort((a, b) => a.length - b.length);
 
-    const total = this.fishCount ?? clamp(Math.round((W * H) / 4400), 85, 340);
+    const total = this.fishCount ?? Math.round(clamp(Math.round((W * H) / 4400), 85, 340) * this.fishScale);
     this.fish = [];
     while (this.fish.length < total) {
       const species = pickSpecies();
