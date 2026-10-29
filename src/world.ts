@@ -79,6 +79,14 @@ export interface WorldEvent {
   y: number;
 }
 
+// Click ripples, in px so they cover the same water at any glyph size.
+// The renderer draws the rings; fish get pushed outward as the front passes.
+export const RIPPLE_SPEED = 51;
+export const RIPPLE_LIFE = 2.2;
+export const RIPPLE_RINGS = 3;
+const RIPPLE_FRONT = 14;
+const RIPPLE_PUSH = 320;
+
 const FISH_SEPARATION_K = 420;
 const FISH_ALIGN_K = 1.4;
 const FISH_COHESION_K = 1;
@@ -93,6 +101,7 @@ export class World {
   sharks: Shark[] = [];
   events: WorldEvent[] = [];
   pointer = { x: 0, y: 0, active: false };
+  private splashes: { x: number; y: number; born: number }[] = [];
 
   /** Fish neighbourhood radius; the spatial hash bucket size matches it. */
   private perception = 60;
@@ -107,6 +116,8 @@ export class World {
   private bucketNext = new Int32Array(0);
   private lastSpawn = 0;
   private tmp = { x: 0, y: 0 };
+  /** Scales the population so fish per cell stays the same as glyphs shrink or grow. */
+  private density = 1;
 
   /** fishCount overrides the area-based population (the sidebar wants a single small school). */
   constructor(
@@ -116,10 +127,12 @@ export class World {
     private fishScale = 1,
   ) {}
 
-  resize(width: number, height: number, cellW: number, cellH: number) {
+  /** refCellArea is the cell size the population is tuned for; smaller cells get more fish. */
+  resize(width: number, height: number, cellW: number, cellH: number, refCellArea = cellW * cellH) {
     const first = this.width === 0;
     this.width = width;
     this.height = height;
+    this.density = refCellArea / (cellW * cellH);
     // Spacing is set in grid cells so every fish lands in its own cell.
     this.sepX = SPECIES.map((sp) => sp.spacing[0] * cellW);
     this.sepY = SPECIES.map((sp) => sp.spacing[1] * cellH);
@@ -179,7 +192,7 @@ export class World {
     // Smaller (farther) sharks draw first so the big one swims over them.
     this.sharks.sort((a, b) => a.length - b.length);
 
-    const total = this.fishCount ?? Math.round(clamp(Math.round((W * H) / 4400), 85, 340) * this.fishScale);
+    const total = this.fishCount ?? Math.round(clamp(Math.round((W * H) / 4400), 85, 340) * this.fishScale * this.density);
     this.fish = [];
     while (this.fish.length < total) {
       const species = pickSpecies();
@@ -212,24 +225,34 @@ export class World {
 
   splash(x: number, y: number) {
     this.events.push({ kind: "splash", x, y });
-    const r = 240;
-    for (const f of this.fish) {
-      if (!f.alive) continue;
-      const dx = f.x - x;
-      const dy = f.y - y;
-      const d = Math.hypot(dx, dy);
-      if (d > r || d < 1e-3) continue;
-      // Flash expansion: everybody nearby bolts straight out.
-      const k = (1 - d / r) * 260;
-      f.vx += (dx / d) * k;
-      f.vy += (dy / d) * k;
-      f.alarm = 1;
+    this.splashes.push({ x, y, born: this.time });
+  }
+
+  /** Fish caught by a ripple's leading ring bolt outward with it. */
+  private stepSplashes(dt: number) {
+    const { time } = this;
+    this.splashes = this.splashes.filter((sp) => time - sp.born < RIPPLE_LIFE);
+    for (const sp of this.splashes) {
+      const age = time - sp.born;
+      const front = age * RIPPLE_SPEED;
+      const k = (1 - age / RIPPLE_LIFE) * RIPPLE_PUSH * dt;
+      for (const f of this.fish) {
+        if (!f.alive) continue;
+        const dx = f.x - sp.x;
+        const dy = f.y - sp.y;
+        const d = Math.hypot(dx, dy);
+        if (d < 1e-3 || Math.abs(d - front) > RIPPLE_FRONT) continue;
+        f.vx += (dx / d) * k;
+        f.vy += (dy / d) * k;
+        f.alarm = 1;
+      }
     }
   }
 
   step(dt: number) {
     this.time += dt;
     this.rebuildHash();
+    this.stepSplashes(dt);
     this.stepFish(dt);
     this.stepSharks(dt);
     this.respawn();
