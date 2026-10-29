@@ -5,29 +5,29 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>新分頁</title>
   <link rel="icon" href="./favicon.svg" type="image/svg+xml">
-  <script src="./theme.js"></script>
-  <script type="module" crossorigin src="./assets/index-DQfuA1jz.js"></script>
-  <link rel="stylesheet" crossorigin href="./assets/index-burj0VVR.css">
+  <script src="./theme.js"></script>
+  <script type="module" crossorigin src="./assets/index-Dnz-EUli.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-Xp932csy.css">
 </head>
 <body>
   <canvas aria-hidden="true"></canvas>
-  <nav class="top" aria-label="Google 服務">
+  <nav class="top" aria-label="Google 服務" data-i18n-label="googleServices">
     <a href="https://mail.google.com/">Gmail</a>
-    <a href="https://www.google.com/imghp">圖片</a>
+    <a href="https://www.google.com/imghp" data-i18n="images">圖片</a>
     <div class="menu">
-      <button id="apps-button" class="round" aria-label="Google 應用程式" aria-expanded="false" aria-controls="apps">
+      <button id="apps-button" class="round" aria-label="Google 應用程式" data-i18n-label="googleApps" aria-expanded="false" aria-controls="apps">
         <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="M6 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm6 0a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm6 0a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM6 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm6 0a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm6 0a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM6 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm6 0a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm6 0a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/></svg>
       </button>
       <div id="apps" class="panel" hidden></div>
     </div>
     <div class="menu">
-      <button id="avatar-button" class="round avatar" aria-label="Google 帳戶" aria-expanded="false" aria-controls="account"></button>
+      <button id="avatar-button" class="round avatar" aria-label="Google 帳戶" data-i18n-label="googleAccount" aria-expanded="false" aria-controls="account"></button>
       <div id="account" class="panel account" hidden>
         <div class="avatar big" id="avatar-big"></div>
-        <a class="pill" href="https://myaccount.google.com/">管理你的 Google 帳戶</a>
+        <a class="pill" href="https://myaccount.google.com/" data-i18n="manageAccount">管理你的 Google 帳戶</a>
         <div class="row">
-          <button type="button" id="avatar-change">更換頭像</button>
-          <button type="button" id="avatar-clear">移除頭像</button>
+          <button type="button" id="avatar-change" data-i18n="changeAvatar">更換頭像</button>
+          <button type="button" id="avatar-clear" data-i18n="removeAvatar">移除頭像</button>
         </div>
         <input type="file" id="avatar-file" accept="image/*" hidden>
       </div>
@@ -36,47 +36,52 @@
   <main>
     <form id="search" role="search">
       <svg class="glass" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
-      <input id="query" aria-label="搜尋 Google 或輸入網址" placeholder="搜尋 Google 或輸入網址" autocomplete="off" autofocus>
-      <button type="submit" aria-label="搜尋">→</button>
+      <input id="query" aria-label="搜尋 Google 或輸入網址" placeholder="搜尋 Google 或輸入網址" data-i18n-label="searchPlaceholder" data-i18n-placeholder="searchPlaceholder" autocomplete="off" autofocus>
+      <button type="submit" aria-label="搜尋" data-i18n-label="search">→</button>
     </form>
-    <div id="shortcuts" aria-label="常用網站"></div>
+    <div id="shortcuts" aria-label="常用網站" data-i18n-label="shortcuts"></div>
   </main>
   <div class="customize">
     <section id="ocean-panel" class="panel ocean" aria-labelledby="ocean-title" hidden>
-      <header><h2 id="ocean-title">自訂</h2><button type="button" id="ocean-close" class="icon-button" aria-label="關閉">✕</button></header>
-      <h3>外觀</h3>
-      <div class="segmented" role="radiogroup" aria-label="主題">
-        <button type="button" role="radio" data-theme-choice="light">☀ 淺色</button>
-        <button type="button" role="radio" data-theme-choice="dark">☾ 深色</button>
-        <button type="button" role="radio" data-theme-choice="system">◐ 系統</button>
+      <header><h2 id="ocean-title" data-i18n="customize">自訂</h2><button type="button" id="ocean-close" class="icon-button" aria-label="關閉" data-i18n-label="close">✕</button></header>
+      <h3 data-i18n="appearance">外觀</h3>
+      <div class="segmented" role="radiogroup" aria-label="主題" data-i18n-label="theme">
+        <button type="button" role="radio" data-theme-choice="light">☀ <span data-i18n="light">淺色</span></button>
+        <button type="button" role="radio" data-theme-choice="dark">☾ <span data-i18n="dark">深色</span></button>
+        <button type="button" role="radio" data-theme-choice="system">◐ <span data-i18n="system">系統</span></button>
       </div>
-      <h3>海洋</h3>
+      <div class="segmented" role="radiogroup" aria-label="語言" data-i18n-label="language">
+        <button type="button" role="radio" data-lang-choice="auto"><span data-i18n="auto">自動</span></button>
+        <button type="button" role="radio" data-lang-choice="en">English</button>
+        <button type="button" role="radio" data-lang-choice="zh">中文</button>
+      </div>
+      <h3 data-i18n="ocean">海洋</h3>
       <div class="card sliders">
-        <label class="slider"><span>游動速度</span><output id="speed-value"></output><input type="range" id="speed" min="0.25" max="3" step="0.05"></label>
-        <label class="slider"><span>字元大小</span><output id="glyph-value"></output><input type="range" id="glyph-scale" min="0.4" max="1" step="0.05"></label>
-        <label class="slider"><span>小魚數量</span><output id="fish-value"></output><input type="range" id="fish-scale" min="0.2" max="4" step="0.1"></label>
+        <label class="slider"><span data-i18n="swimSpeed">游動速度</span><output id="speed-value"></output><input type="range" id="speed" min="0.25" max="3" step="0.05"></label>
+        <label class="slider"><span data-i18n="glyphSize">字元大小</span><output id="glyph-value"></output><input type="range" id="glyph-scale" min="0.4" max="1" step="0.05"></label>
+        <label class="slider"><span data-i18n="fishAmount">小魚數量</span><output id="fish-value"></output><input type="range" id="fish-scale" min="0.2" max="4" step="0.1"></label>
       </div>
-      <div class="section-head"><h3>鯊魚 <small id="shark-count"></small></h3><button type="button" id="shark-add" class="text-button">＋ 新增</button></div>
+      <div class="section-head"><h3><span data-i18n="sharks">鯊魚</span> <small id="shark-count"></small></h3><button type="button" id="shark-add" class="text-button">＋ <span data-i18n="add">新增</span></button></div>
       <div id="shark-list"></div>
-      <footer><button type="button" id="ocean-reset" class="text-button">恢復預設</button></footer>
+      <footer><button type="button" id="ocean-reset" class="text-button" data-i18n="resetDefaults">恢復預設</button></footer>
     </section>
     <button id="ocean-button" class="pill-button" aria-expanded="false" aria-controls="ocean-panel">
       <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
-      自訂
+      <span data-i18n="customize">自訂</span>
     </button>
   </div>
   <dialog id="editor">
     <form id="shortcut-form">
       <h2 id="editor-title">新增捷徑</h2>
-      <label>名稱<input id="link-name" maxlength="32" required></label>
-      <label>網址<input id="link-url" placeholder="https://example.com" required></label>
+      <label><span data-i18n="name">名稱</span><input id="link-name" maxlength="32" required></label>
+      <label><span data-i18n="url">網址</span><input id="link-url" placeholder="https://example.com" required></label>
       <p id="error" role="alert"></p>
       <div class="actions">
-        <button type="button" id="delete" class="danger">移除</button>
-        <button type="button" id="cancel">取消</button>
-        <button type="submit">儲存</button>
+        <button type="button" id="delete" class="danger" data-i18n="remove">移除</button>
+        <button type="button" id="cancel" data-i18n="cancel">取消</button>
+        <button type="submit" data-i18n="save">儲存</button>
       </div>
     </form>
-  </dialog>
+  </dialog>
 </body>
 </html>

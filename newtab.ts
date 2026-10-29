@@ -1,4 +1,7 @@
 import { DEFAULT_SHARKS, OceanEngine, type SharkKind } from "./src";
+import { languageChoice, languageKey, t, translatePage, type Language } from "./i18n";
+
+translatePage();
 
 declare const chrome: any;
 const extension = typeof chrome !== "undefined" && !!chrome.storage?.local;
@@ -42,10 +45,9 @@ type SharkSetting = { kind: SharkKind; size: number; color: string | null };
 type Theme = "light" | "dark" | "system";
 type Ocean = { sharks: SharkSetting[]; fishScale: number; glyphScale: number; speed: number; theme: Theme };
 const oceanKey = "ascii-sharks-ocean";
-const kinds: [SharkKind, string][] = [
-  ["classic", "經典鯊"], ["hammerhead", "雙髻鯊"], ["greathammer", "大雙髻鯊"], ["tiger", "虎鯊"],
-  ["zebra", "斑馬鯊"], ["mako", "灰鯖鯊"], ["thresher", "長尾鯊"], ["nurse", "鉸口鯊"],
-];
+const kinds: [SharkKind, string][] = (
+  ["classic", "hammerhead", "greathammer", "tiger", "zebra", "mako", "thresher", "nurse"] as const
+).map(kind => [kind, t(kind)]);
 // Rough look of the built-in tints, shown in the colour picker until one is chosen.
 const builtInColors = ["#3ad0e6", "#c25ae6", "#e6a038", "#4ad874"];
 const defaultOcean = (): Ocean => ({
@@ -80,6 +82,17 @@ function applyTheme() {
 lightQuery.addEventListener("change", applyTheme);
 for (const button of document.querySelectorAll<HTMLButtonElement>("[data-theme-choice]")) {
   button.addEventListener("click", () => { ocean.theme = button.dataset.themeChoice as Theme; applyTheme(); changeOcean(false); });
+}
+
+// Language: strings are applied once at startup, so switching reloads the page.
+for (const button of document.querySelectorAll<HTMLButtonElement>("[data-lang-choice]")) {
+  button.setAttribute("aria-checked", String(button.dataset.langChoice === languageChoice));
+  button.addEventListener("click", () => {
+    const choice = button.dataset.langChoice as Language;
+    if (choice === languageChoice) return;
+    try { localStorage.setItem(languageKey, choice); } catch { /* Stays on the current language. */ }
+    location.reload();
+  });
 }
 
 // Native <select> popups can't be styled, so the kind picker is a popover listbox.
@@ -163,29 +176,29 @@ function renderOcean() {
     const color = document.createElement("input");
     color.type = "color";
     color.value = shark.color ?? builtInColors[index % builtInColors.length];
-    color.title = color.ariaLabel = "顏色";
+    color.title = color.ariaLabel = t("color");
     color.addEventListener("change", () => { shark.color = color.value; changeOcean(); });
     const kind = dropdown(shark.kind, picked => { shark.kind = picked; changeOcean(); });
-    kind.title = "種類";
+    kind.title = t("kind");
     const size = document.createElement("input");
     size.type = "range";
     size.min = "0.4"; size.max = "1.3"; size.step = "0.05";
     size.value = String(shark.size);
-    size.title = size.ariaLabel = "大小";
+    size.title = size.ariaLabel = t("size");
     fill(size);
     size.addEventListener("change", () => { shark.size = Number(size.value); changeOcean(); });
     const reset = document.createElement("button");
     reset.type = "button";
     reset.className = "icon-button";
     reset.textContent = "↺";
-    reset.title = reset.ariaLabel = "恢復原色";
+    reset.title = reset.ariaLabel = t("resetColor");
     reset.disabled = shark.color === null;
     reset.addEventListener("click", () => { shark.color = null; changeOcean(); });
     const remove = document.createElement("button");
     remove.type = "button";
     remove.className = "icon-button";
     remove.textContent = "✕";
-    remove.title = remove.ariaLabel = "移除這隻鯊魚";
+    remove.title = remove.ariaLabel = t("removeShark");
     remove.disabled = ocean.sharks.length <= 1;
     remove.addEventListener("click", () => { ocean.sharks.splice(index, 1); changeOcean(); });
     row.append(color, kind, size, reset, remove);
@@ -225,11 +238,11 @@ load<Partial<Ocean>>(oceanKey).then(saved => {
 
 // Top-right menus.
 const apps = [
-  ["搜尋", "https://www.google.com/"], ["地圖", "https://maps.google.com/"], ["YouTube", "https://www.youtube.com/"],
-  ["Gmail", "https://mail.google.com/"], ["Meet", "https://meet.google.com/"], ["雲端硬碟", "https://drive.google.com/"],
-  ["日曆", "https://calendar.google.com/"], ["翻譯", "https://translate.google.com/"], ["相簿", "https://photos.google.com/"],
-  ["文件", "https://docs.google.com/document/"], ["試算表", "https://docs.google.com/spreadsheets/"], ["簡報", "https://docs.google.com/presentation/"],
-  ["Gemini", "https://gemini.google.com/"], ["Keep", "https://keep.google.com/"], ["新聞", "https://news.google.com/"],
+  [t("appSearch"), "https://www.google.com/"], [t("appMaps"), "https://maps.google.com/"], ["YouTube", "https://www.youtube.com/"],
+  ["Gmail", "https://mail.google.com/"], ["Meet", "https://meet.google.com/"], [t("appDrive"), "https://drive.google.com/"],
+  [t("appCalendar"), "https://calendar.google.com/"], [t("appTranslate"), "https://translate.google.com/"], [t("appPhotos"), "https://photos.google.com/"],
+  [t("appDocs"), "https://docs.google.com/document/"], [t("appSheets"), "https://docs.google.com/spreadsheets/"], [t("appSlides"), "https://docs.google.com/presentation/"],
+  ["Gemini", "https://gemini.google.com/"], ["Keep", "https://keep.google.com/"], [t("appNews"), "https://news.google.com/"],
 ];
 const appsPanel = document.querySelector<HTMLElement>("#apps")!;
 const appIcons: [string, HTMLElement][] = [];
@@ -330,7 +343,7 @@ function open(index: number) {
   error.textContent = "";
   nameInput.value = links[index]?.name ?? "";
   urlInput.value = links[index]?.url ?? "";
-  document.querySelector("#editor-title")!.textContent = index < 0 ? "新增捷徑" : "編輯捷徑";
+  document.querySelector("#editor-title")!.textContent = index < 0 ? t("addShortcut") : t("editShortcut");
   deleteButton.hidden = index < 0;
   editor.showModal();
 }
@@ -359,14 +372,15 @@ function render() {
     const edit = document.createElement("button");
     edit.className = "edit";
     edit.textContent = "⋮";
-    edit.setAttribute("aria-label", `編輯 ${link.name}`);
+    edit.setAttribute("aria-label", `${t("edit")} ${link.name}`);
     edit.addEventListener("click", () => open(index));
     item.append(a, edit);
     container.append(item);
   });
   const add = document.createElement("button");
   add.className = "add";
-  add.innerHTML = '<span class="icon">＋</span><span class="label">新增捷徑</span>';
+  add.innerHTML = '<span class="icon">＋</span><span class="label"></span>';
+  add.querySelector(".label")!.textContent = t("addShortcut");
   add.addEventListener("click", () => open(-1));
   container.append(add);
 }
@@ -381,7 +395,7 @@ form.addEventListener("submit", event => {
     links = editing < 0 ? [...links, link] : links.map((l, i) => i === editing ? link : l);
     save();
     editor.close();
-  } catch { error.textContent = "請輸入名稱與有效的 http 或 https 網址。"; }
+  } catch { error.textContent = t("shortcutError"); }
 });
 
 function valid(saved: unknown): saved is Shortcut[] {
