@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>新分頁</title>
+  <script type="module" crossorigin src="./assets/index-C_LdVzbM.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-B0bvoCNq.css">
+</head>
+<body>
+  <canvas aria-hidden="true"></canvas>
+  <nav class="top" aria-label="Google 服務">
+    <a href="https://mail.google.com/">Gmail</a>
+    <a href="https://www.google.com/imghp">圖片</a>
+    <div class="menu">
+      <button id="apps-button" class="round" aria-label="Google 應用程式" aria-expanded="false" aria-controls="apps">
+        <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="M6 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm6 0a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm6 0a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM6 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm6 0a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm6 0a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM6 20a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm6 0a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm6 0a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/></svg>
+      </button>
+      <div id="apps" class="panel" hidden></div>
+    </div>
+    <div class="menu">
+      <button id="avatar-button" class="round avatar" aria-label="Google 帳戶" aria-expanded="false" aria-controls="account"></button>
+      <div id="account" class="panel account" hidden>
+        <div class="avatar big" id="avatar-big"></div>
+        <a class="pill" href="https://myaccount.google.com/">管理你的 Google 帳戶</a>
+        <div class="row">
+          <button type="button" id="avatar-change">更換頭像</button>
+          <button type="button" id="avatar-clear">移除頭像</button>
+        </div>
+        <input type="file" id="avatar-file" accept="image/*" hidden>
+      </div>
+    </div>
+  </nav>
+  <main>
+    <form id="search" role="search">
+      <svg class="glass" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+      <input id="query" aria-label="搜尋 Google 或輸入網址" placeholder="搜尋 Google 或輸入網址" autocomplete="off" autofocus required>
+      <button type="submit" aria-label="搜尋">→</button>
+    </form>
+    <div id="shortcuts" aria-label="常用網站"></div>
+  </main>
+  <dialog id="editor">
+    <form id="shortcut-form">
+      <h2 id="editor-title">新增捷徑</h2>
+      <label>名稱<input id="link-name" maxlength="32" required></label>
+      <label>網址<input id="link-url" placeholder="https://example.com" required></label>
+      <p id="error" role="alert"></p>
+      <div class="actions">
+        <button type="button" id="delete" class="danger">移除</button>
+        <button type="button" id="cancel">取消</button>
+        <button type="submit">儲存</button>
+      </div>
+    </form>
+  </dialog>
+</body>
+</html>

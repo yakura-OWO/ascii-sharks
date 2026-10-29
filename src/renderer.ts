@@ -23,6 +23,14 @@ const DOT_RGB: [number, number, number][] = [
 const DOT_BASE_ALPHA = [1, 1, 1, 1, 1];
 const WAKE = DOT_RGB.length - 1;
 
+// Stable per-shark colours: cyan, violet, amber, green.
+const SHARK_COLORS: [number, number, number][] = [
+  [0.25, 1.05, 1.2],
+  [0.95, 0.4, 1.2],
+  [1.2, 0.72, 0.2],
+  [0.3, 1.15, 0.5],
+];
+
 const ACCENTS = ["#e0892c", "#e03a32", "#b44ae0", "#33c8cc", "#3cb54a", "#3150e8", "#d9c14a"];
 
 // Sparse glyphs on bright skin, dense glyphs in shadow, so the texture
@@ -294,6 +302,7 @@ export class AsciiRenderer {
   private sharkKey = new Uint32Array(0);
   private sharkDepth = new Float32Array(0);
   private sharkKind = new Uint8Array(0);
+  private sharkColor = new Uint8Array(0);
   /** Cells darkened by a shark's shadow on the seabed. */
   private sharkShadow = new Uint8Array(0);
   private spine = new Float32Array(SHARK_NODES * 2);
@@ -375,6 +384,7 @@ export class AsciiRenderer {
       this.sharkKey = new Uint32Array(n);
       this.sharkDepth = new Float32Array(n);
       this.sharkKind = new Uint8Array(n);
+      this.sharkColor = new Uint8Array(n);
       this.sharkShadow = new Uint8Array(n);
       this.fishStamp = new Uint32Array(n);
     }
@@ -733,6 +743,7 @@ export class AsciiRenderer {
           sharkKey[i] = key;
           sharkDepth[i] = sh.depth;
           sharkKind[i] = kindIndex;
+          this.sharkColor[i] = (sh.id - 1) % SHARK_COLORS.length;
 
           if (centerHit && coverage >= 0.6) {
             sharkFlag[i] = flag;
@@ -763,7 +774,9 @@ export class AsciiRenderer {
       const key = sharkKey[i];
       const shade = sharkShade[i];
       const dim = 0.7 + 0.3 * sharkDepth[i];
-      const [tr, tg, tb] = SHAPES[KINDS[sharkKind[i]]].tint;
+      const [sr, sg, sb] = SHAPES[KINDS[sharkKind[i]]].tint;
+      const [cr, cg, cb] = SHARK_COLORS[this.sharkColor[i]];
+      const [tr, tg, tb] = [sr * cr, sg * cg, sb * cb];
 
       // Colours re-roll on a staggered clock so the hide shimmers.
       const tick = Math.floor(t * 2.4 + (key % 997) / 97);
