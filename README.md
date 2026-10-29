@@ -1,3 +1,5 @@
+
+本專安完全由 claude 及 codex 開發
 # ascii sharks
 
 ```
