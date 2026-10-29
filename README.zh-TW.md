@@ -1,4 +1,4 @@
-[English](README.md) | [繁體中文](README.zh-TW.md)
+[繁體中文](README.zh-TW.md)|[English](README.md)
 # ASCII Sharks
 
 ```
@@ -65,7 +65,7 @@ npm run build
 ## 原始專案
 本專案基於 [stackedlol/ascii-sharks](https://github.com/stackedlol/ascii-sharks) 修改。
 
-- 原作者：drewdi（stackedlol）
+- 原作者：drewdi
 - 原始專案庫：stackedlol/ascii-sharks
 - 原始專案：ASCII 魚群與鯊魚動畫引擎
 - 本專案新增：Chrome 新分頁介面、搜尋、捷徑及自訂功能
