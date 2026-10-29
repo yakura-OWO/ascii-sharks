@@ -44,8 +44,8 @@ const clamp = (v, lo, hi) => v < lo ? lo : v > hi ? hi : v;
 const rand = (lo, hi) => lo + Math.random() * (hi - lo);
 const randInt = (lo, hi) => Math.floor(rand(lo, hi + 1));
 function smoothstep(e0, e1, x) {
-  const t = clamp((x - e0) / (e1 - e0), 0, 1);
-  return t * t * (3 - 2 * t);
+  const t2 = clamp((x - e0) / (e1 - e0), 0, 1);
+  return t2 * t2 * (3 - 2 * t2);
 }
 function angleDiff(a, b) {
   let d = (b - a) % TAU;
@@ -63,10 +63,10 @@ const K1 = 1 / 260;
 const K2 = 1 / 310;
 const K3 = 1 / 190;
 const CURRENT_SCALE = 3400;
-function current(x, y, t, out) {
-  const a = x * K1 + t * 0.07;
-  const b = y * K2 - t * 0.05;
-  const c = (x + y) * K3 + t * 0.11;
+function current(x, y, t2, out) {
+  const a = x * K1 + t2 * 0.07;
+  const b = y * K2 - t2 * 0.05;
+  const c = (x + y) * K3 + t2 * 0.11;
   out.x = (-K2 * Math.sin(a) * Math.sin(b) + 0.5 * K3 * Math.cos(c)) * CURRENT_SCALE;
   out.y = (-K1 * Math.cos(a) * Math.cos(b) - 0.5 * K3 * Math.cos(c)) * CURRENT_SCALE;
   return out;
@@ -512,12 +512,12 @@ class World {
         sh.target = this.findPrey(sh);
         sh.retargetAt = time + 0.45;
       }
-      const t = sh.target;
+      const t2 = sh.target;
       let hunting = false;
       let closing = 0;
-      if (t && t.alive && sh.hunger > 0.3) {
-        const tx = t.x + t.vx * 0.35 - hx;
-        const ty = t.y + t.vy * 0.35 - hy;
+      if (t2 && t2.alive && sh.hunger > 0.3) {
+        const tx = t2.x + t2.vx * 0.35 - hx;
+        const ty = t2.y + t2.vy * 0.35 - hy;
         const d = Math.hypot(tx, ty) || 1;
         const w = 1.4 + 2.6 * sh.hunger;
         dx += tx / d * w;
@@ -1016,22 +1016,22 @@ class AsciiRenderer {
   render(world, dt) {
     const { ctx, dpr, cols, ch } = this;
     if (cols === 0) return;
-    const t = world.time;
+    const t2 = world.time;
     this.consumeEvents(world);
-    this.rasterizeSharks(world.sharks, t);
+    this.rasterizeSharks(world.sharks, t2);
     this.depositWake(world);
     this.diffuse(dt);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.drawImage(this.bg, 0, 0);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     this.markFish(world);
-    this.drawDots(t);
+    this.drawDots(t2);
     ctx.font = `600 ${Math.round(ch * 0.74)}px ${this.fontFamily}`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     this.drawHeat();
     this.drawFish();
-    this.drawSharks(t);
+    this.drawSharks(t2);
   }
   // ── simulation → field ──────────────────────────────────────────────
   cellIndex(x, y) {
@@ -1221,7 +1221,7 @@ class AsciiRenderer {
    * supersample every cell in the shark's bounding box against the shape.
    * Fully covered cells become solid skin; partial cells become edge glyphs.
    */
-  rasterizeSharks(sharks, t) {
+  rasterizeSharks(sharks, t2) {
     const { sharkFlag, sharkShade, sharkKey, sharkDepth, sharkKind, sharkShadow, spine, arc, cw, ch, cols, rows } = this;
     sharkFlag.fill(0);
     sharkShadow.fill(0);
@@ -1300,7 +1300,7 @@ class AsciiRenderer {
           this.sharkColor[i] = sh.id - 1 & 255;
           if (centerHit && coverage >= 0.6) {
             sharkFlag[i] = flag;
-            const flicker = (hash3(c, r, Math.floor(t * 6)) - 0.5) * 0.06;
+            const flicker = (hash3(c, r, Math.floor(t2 * 6)) - 0.5) * 0.06;
             sharkShade[i] = clamp(shade + flicker, 0, 1);
             const sc = c + shadowDc;
             const sr = r + shadowDr;
@@ -1313,7 +1313,7 @@ class AsciiRenderer {
       }
     }
   }
-  drawSharks(t) {
+  drawSharks(t2) {
     const { ctx, cols, rows, cw, ch, sharkFlag, sharkShade, sharkKey, sharkDepth, sharkKind } = this;
     const n = cols * rows;
     for (let i = 0; i < n; i++) {
@@ -1329,7 +1329,7 @@ class AsciiRenderer {
       const [sr, sg, sb] = SHAPES[KINDS[sharkKind[i]]].tint;
       const [cr, cg, cb] = SHARK_COLORS[this.sharkColor[i] % SHARK_COLORS.length];
       const [tr, tg, tb] = this.palette[this.sharkColor[i]] ?? [sr * cr, sg * cg, sb * cb];
-      const tick = Math.floor(t * 2.4 + key2 % 997 / 97);
+      const tick = Math.floor(t2 * 2.4 + key2 % 997 / 97);
       const roll = hash3(key2, tick, 7);
       if (flag === FLAG_EDGE) {
         const set = shade >= 0.5 ? EDGE_HEAVY : EDGE_LIGHT;
@@ -1419,7 +1419,7 @@ class AsciiRenderer {
    * caustic light bands, and flares cyan where the wake field is strong.
    * Dots are bucketed by colour/alpha so each bucket is one fillStyle.
    */
-  drawDots(t) {
+  drawDots(t2) {
     const { ctx, cols, rows, cw, ch, dotKind, dotPhase, dotFreq, energy, sharkFlag, sharkShadow, fishStamp, frameId } = this;
     const { bucketOf, bucketOrder, bucketCounts } = this;
     const n = cols * rows;
@@ -1439,8 +1439,8 @@ class AsciiRenderer {
       } else {
         const col = i % cols;
         const row = i / cols | 0;
-        const twinkle = 0.5 + 0.5 * Math.sin(t * dotFreq[i] + dotPhase[i]);
-        const caustic = 0.85 + 0.15 * Math.sin(col * 0.11 + t * 0.35) * Math.sin(row * 0.17 - t * 0.27);
+        const twinkle = 0.5 + 0.5 * Math.sin(t2 * dotFreq[i] + dotPhase[i]);
+        const caustic = 0.85 + 0.15 * Math.sin(col * 0.11 + t2 * 0.35) * Math.sin(row * 0.17 - t2 * 0.27);
         let v = clamp((0.55 + 0.45 * twinkle) * caustic + e * 2, 0, 1);
         if (sharkShadow[i]) v *= 0.2;
         bucket = (kind - 1) * ALPHA_LEVELS + clamp(Math.floor(v * ALPHA_LEVELS), 0, ALPHA_LEVELS - 1);
@@ -1591,6 +1591,165 @@ class OceanEngine {
     return { x, y, inside };
   }
 }
+const en = {
+  pageTitle: "New Tab",
+  googleServices: "Google services",
+  images: "Images",
+  googleApps: "Google apps",
+  googleAccount: "Google Account",
+  manageAccount: "Manage your Google Account",
+  changeAvatar: "Change picture",
+  removeAvatar: "Remove picture",
+  searchPlaceholder: "Search Google or type a URL",
+  search: "Search",
+  shortcuts: "Shortcuts",
+  customize: "Customize",
+  close: "Close",
+  appearance: "Appearance",
+  theme: "Theme",
+  light: "Light",
+  dark: "Dark",
+  system: "System",
+  language: "Language",
+  auto: "Auto",
+  ocean: "Ocean",
+  swimSpeed: "Swim speed",
+  glyphSize: "Character size",
+  fishAmount: "Fish amount",
+  sharks: "Sharks",
+  add: "Add",
+  resetDefaults: "Reset to defaults",
+  addShortcut: "Add shortcut",
+  editShortcut: "Edit shortcut",
+  edit: "Edit",
+  name: "Name",
+  url: "URL",
+  remove: "Remove",
+  cancel: "Cancel",
+  save: "Save",
+  shortcutError: "Enter a name and a valid http or https URL.",
+  color: "Color",
+  kind: "Type",
+  size: "Size",
+  resetColor: "Reset color",
+  removeShark: "Remove this shark",
+  // Shark kinds
+  classic: "Classic",
+  hammerhead: "Hammerhead",
+  greathammer: "Great hammerhead",
+  tiger: "Tiger",
+  zebra: "Zebra",
+  mako: "Mako",
+  thresher: "Thresher",
+  nurse: "Nurse",
+  // Google apps
+  appSearch: "Search",
+  appMaps: "Maps",
+  appDrive: "Drive",
+  appCalendar: "Calendar",
+  appTranslate: "Translate",
+  appPhotos: "Photos",
+  appDocs: "Docs",
+  appSheets: "Sheets",
+  appSlides: "Slides",
+  appNews: "News"
+};
+const zh = {
+  pageTitle: "新分頁",
+  googleServices: "Google 服務",
+  images: "圖片",
+  googleApps: "Google 應用程式",
+  googleAccount: "Google 帳戶",
+  manageAccount: "管理你的 Google 帳戶",
+  changeAvatar: "更換頭像",
+  removeAvatar: "移除頭像",
+  searchPlaceholder: "搜尋 Google 或輸入網址",
+  search: "搜尋",
+  shortcuts: "常用網站",
+  customize: "自訂",
+  close: "關閉",
+  appearance: "外觀",
+  theme: "主題",
+  light: "淺色",
+  dark: "深色",
+  system: "系統",
+  language: "語言",
+  auto: "自動",
+  ocean: "海洋",
+  swimSpeed: "游動速度",
+  glyphSize: "字元大小",
+  fishAmount: "小魚數量",
+  sharks: "鯊魚",
+  add: "新增",
+  resetDefaults: "恢復預設",
+  addShortcut: "新增捷徑",
+  editShortcut: "編輯捷徑",
+  edit: "編輯",
+  name: "名稱",
+  url: "網址",
+  remove: "移除",
+  cancel: "取消",
+  save: "儲存",
+  shortcutError: "請輸入名稱與有效的 http 或 https 網址。",
+  color: "顏色",
+  kind: "種類",
+  size: "大小",
+  resetColor: "恢復原色",
+  removeShark: "移除這隻鯊魚",
+  classic: "經典鯊",
+  hammerhead: "雙髻鯊",
+  greathammer: "大雙髻鯊",
+  tiger: "虎鯊",
+  zebra: "斑馬鯊",
+  mako: "灰鯖鯊",
+  thresher: "長尾鯊",
+  nurse: "鉸口鯊",
+  appSearch: "搜尋",
+  appMaps: "地圖",
+  appDrive: "雲端硬碟",
+  appCalendar: "日曆",
+  appTranslate: "翻譯",
+  appPhotos: "相簿",
+  appDocs: "文件",
+  appSheets: "試算表",
+  appSlides: "簡報",
+  appNews: "新聞"
+};
+const languageKey = "ascii-sharks-lang";
+function chosenLanguage() {
+  try {
+    const saved = localStorage.getItem(languageKey);
+    if (saved === "en" || saved === "zh") return saved;
+  } catch {
+  }
+  return "auto";
+}
+const languageChoice = chosenLanguage();
+const lang = languageChoice === "auto" ? navigator.language.toLowerCase().startsWith("zh") ? "zh" : "en" : languageChoice;
+const strings = lang === "zh" ? zh : en;
+function t(key2) {
+  return strings[key2];
+}
+function isKey(key2) {
+  return key2 in en;
+}
+function translatePage() {
+  document.documentElement.lang = lang === "zh" ? "zh-Hant" : "en";
+  document.title = t("pageTitle");
+  for (const el of document.querySelectorAll("[data-i18n]")) {
+    const key2 = el.dataset.i18n;
+    if (isKey(key2)) el.textContent = t(key2);
+  }
+  for (const el of document.querySelectorAll("[data-i18n-label]")) {
+    const key2 = el.dataset.i18nLabel;
+    if (isKey(key2)) el.setAttribute("aria-label", t(key2));
+  }
+  for (const el of document.querySelectorAll("[data-i18n-placeholder]")) {
+    const key2 = el.dataset.i18nPlaceholder;
+    if (isKey(key2)) el.placeholder = t(key2);
+  }
+}
+translatePage();
 const extension = typeof chrome !== "undefined" && !!((_a = chrome.storage) == null ? void 0 : _a.local);
 async function load(key2) {
   try {
@@ -1625,16 +1784,7 @@ document.querySelector("#search").addEventListener("submit", (event) => {
   if (text) location.href = destination(text);
 });
 const oceanKey = "ascii-sharks-ocean";
-const kinds = [
-  ["classic", "經典鯊"],
-  ["hammerhead", "雙髻鯊"],
-  ["greathammer", "大雙髻鯊"],
-  ["tiger", "虎鯊"],
-  ["zebra", "斑馬鯊"],
-  ["mako", "灰鯖鯊"],
-  ["thresher", "長尾鯊"],
-  ["nurse", "鉸口鯊"]
-];
+const kinds = ["classic", "hammerhead", "greathammer", "tiger", "zebra", "mako", "thresher", "nurse"].map((kind) => [kind, t(kind)]);
 const builtInColors = ["#3ad0e6", "#c25ae6", "#e6a038", "#4ad874"];
 const defaultOcean = () => ({
   sharks: DEFAULT_SHARKS.map((s) => ({ ...s, color: null })),
@@ -1675,6 +1825,18 @@ for (const button of document.querySelectorAll("[data-theme-choice]")) {
     ocean.theme = button.dataset.themeChoice;
     applyTheme();
     changeOcean(false);
+  });
+}
+for (const button of document.querySelectorAll("[data-lang-choice]")) {
+  button.setAttribute("aria-checked", String(button.dataset.langChoice === languageChoice));
+  button.addEventListener("click", () => {
+    const choice = button.dataset.langChoice;
+    if (choice === languageChoice) return;
+    try {
+      localStorage.setItem(languageKey, choice);
+    } catch {
+    }
+    location.reload();
   });
 }
 const listbox = document.createElement("div");
@@ -1769,7 +1931,7 @@ function renderOcean() {
     const color = document.createElement("input");
     color.type = "color";
     color.value = shark.color ?? builtInColors[index % builtInColors.length];
-    color.title = color.ariaLabel = "顏色";
+    color.title = color.ariaLabel = t("color");
     color.addEventListener("change", () => {
       shark.color = color.value;
       changeOcean();
@@ -1778,14 +1940,14 @@ function renderOcean() {
       shark.kind = picked;
       changeOcean();
     });
-    kind.title = "種類";
+    kind.title = t("kind");
     const size = document.createElement("input");
     size.type = "range";
     size.min = "0.4";
     size.max = "1.3";
     size.step = "0.05";
     size.value = String(shark.size);
-    size.title = size.ariaLabel = "大小";
+    size.title = size.ariaLabel = t("size");
     fill(size);
     size.addEventListener("change", () => {
       shark.size = Number(size.value);
@@ -1795,7 +1957,7 @@ function renderOcean() {
     reset.type = "button";
     reset.className = "icon-button";
     reset.textContent = "↺";
-    reset.title = reset.ariaLabel = "恢復原色";
+    reset.title = reset.ariaLabel = t("resetColor");
     reset.disabled = shark.color === null;
     reset.addEventListener("click", () => {
       shark.color = null;
@@ -1805,7 +1967,7 @@ function renderOcean() {
     remove.type = "button";
     remove.className = "icon-button";
     remove.textContent = "✕";
-    remove.title = remove.ariaLabel = "移除這隻鯊魚";
+    remove.title = remove.ariaLabel = t("removeShark");
     remove.disabled = ocean.sharks.length <= 1;
     remove.addEventListener("click", () => {
       ocean.sharks.splice(index, 1);
@@ -1851,21 +2013,21 @@ load(oceanKey).then((saved) => {
   startOcean();
 });
 const apps = [
-  ["搜尋", "https://www.google.com/"],
-  ["地圖", "https://maps.google.com/"],
+  [t("appSearch"), "https://www.google.com/"],
+  [t("appMaps"), "https://maps.google.com/"],
   ["YouTube", "https://www.youtube.com/"],
   ["Gmail", "https://mail.google.com/"],
   ["Meet", "https://meet.google.com/"],
-  ["雲端硬碟", "https://drive.google.com/"],
-  ["日曆", "https://calendar.google.com/"],
-  ["翻譯", "https://translate.google.com/"],
-  ["相簿", "https://photos.google.com/"],
-  ["文件", "https://docs.google.com/document/"],
-  ["試算表", "https://docs.google.com/spreadsheets/"],
-  ["簡報", "https://docs.google.com/presentation/"],
+  [t("appDrive"), "https://drive.google.com/"],
+  [t("appCalendar"), "https://calendar.google.com/"],
+  [t("appTranslate"), "https://translate.google.com/"],
+  [t("appPhotos"), "https://photos.google.com/"],
+  [t("appDocs"), "https://docs.google.com/document/"],
+  [t("appSheets"), "https://docs.google.com/spreadsheets/"],
+  [t("appSlides"), "https://docs.google.com/presentation/"],
   ["Gemini", "https://gemini.google.com/"],
   ["Keep", "https://keep.google.com/"],
-  ["新聞", "https://news.google.com/"]
+  [t("appNews"), "https://news.google.com/"]
 ];
 const appsPanel = document.querySelector("#apps");
 const appIcons = [];
@@ -1972,7 +2134,7 @@ function open(index) {
   error.textContent = "";
   nameInput.value = ((_a2 = links[index]) == null ? void 0 : _a2.name) ?? "";
   urlInput.value = ((_b = links[index]) == null ? void 0 : _b.url) ?? "";
-  document.querySelector("#editor-title").textContent = index < 0 ? "新增捷徑" : "編輯捷徑";
+  document.querySelector("#editor-title").textContent = index < 0 ? t("addShortcut") : t("editShortcut");
   deleteButton.hidden = index < 0;
   editor.showModal();
 }
@@ -2001,14 +2163,15 @@ function render() {
     const edit = document.createElement("button");
     edit.className = "edit";
     edit.textContent = "⋮";
-    edit.setAttribute("aria-label", `編輯 ${link.name}`);
+    edit.setAttribute("aria-label", `${t("edit")} ${link.name}`);
     edit.addEventListener("click", () => open(index));
     item.append(a, edit);
     container.append(item);
   });
   const add = document.createElement("button");
   add.className = "add";
-  add.innerHTML = '<span class="icon">＋</span><span class="label">新增捷徑</span>';
+  add.innerHTML = '<span class="icon">＋</span><span class="label"></span>';
+  add.querySelector(".label").textContent = t("addShortcut");
   add.addEventListener("click", () => open(-1));
   container.append(add);
 }
@@ -2024,7 +2187,7 @@ form.addEventListener("submit", (event) => {
     save();
     editor.close();
   } catch {
-    error.textContent = "請輸入名稱與有效的 http 或 https 網址。";
+    error.textContent = t("shortcutError");
   }
 });
 function valid(saved) {

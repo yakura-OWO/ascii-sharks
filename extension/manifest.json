@@ -1,8 +1,9 @@
 {
   "manifest_version": 3,
-  "name": "ASCII Sharks — 彩色鯊魚新分頁",
-  "version": "1.1.0",
-  "description": "彩色 ASCII 鯊魚動態背景、Google 搜尋與自訂捷徑。",
+  "name": "__MSG_extName__",
+  "version": "1.2.0",
+  "description": "__MSG_extDescription__",
+  "default_locale": "en",
   "permissions": ["storage", "favicon"],
   "chrome_url_overrides": { "newtab": "index.html" },
   "content_security_policy": { "extension_pages": "script-src 'self'; object-src 'self'" }
