@@ -73,7 +73,7 @@ npm run build
 感謝原作者開源此專案。
 
 ## AI 開發聲明
-本專案的修改與擴充程式碼由 **Anthropic Claude code 和 OpenAI Codex** 協助產生。
+本專案的修改與擴充程式碼由 **Anthropic Claude Code 和 OpenAI Codex** 協助產生。
 原始 ASCII 動畫引擎來自上述開源專案，並非由本專案的 AI 工具原創。
 
 ## 授權
