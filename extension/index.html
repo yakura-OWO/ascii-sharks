@@ -6,8 +6,8 @@
   <title>新分頁</title>
   <link rel="icon" href="./favicon.svg" type="image/svg+xml">
   <script src="./theme.js"></script>
-  <script type="module" crossorigin src="./assets/index-6DH3Gcrh.js"></script>
-  <link rel="stylesheet" crossorigin href="./assets/index-DP_az4_D.css">
+  <script type="module" crossorigin src="./assets/index-BBSP8Jlp.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-Dvv0KBuQ.css">
 </head>
 <body>
   <canvas aria-hidden="true"></canvas>
@@ -43,10 +43,7 @@
   </main>
   <div class="customize">
     <section id="ocean-panel" class="panel ocean" aria-labelledby="ocean-title" hidden>
-      <header>
-        <h2 id="ocean-title">自訂</h2>
-        <button type="button" id="ocean-close" class="icon-button" aria-label="關閉">✕</button>
-      </header>
+      <header><h2 id="ocean-title">自訂</h2><button type="button" id="ocean-close" class="icon-button" aria-label="關閉">✕</button></header>
       <h3>外觀</h3>
       <div class="segmented" role="radiogroup" aria-label="主題">
         <button type="button" role="radio" data-theme-choice="light">☀ 淺色</button>
@@ -55,26 +52,11 @@
       </div>
       <h3>海洋</h3>
       <div class="card sliders">
-        <label class="slider">
-          <span>游動速度</span>
-          <output id="speed-value"></output>
-          <input type="range" id="speed" min="0.25" max="3" step="0.05">
-        </label>
-        <label class="slider">
-          <span>字元大小</span>
-          <output id="glyph-value"></output>
-          <input type="range" id="glyph-scale" min="0.4" max="1" step="0.05">
-        </label>
-        <label class="slider">
-          <span>小魚數量</span>
-          <output id="fish-value"></output>
-          <input type="range" id="fish-scale" min="0.2" max="4" step="0.1">
-        </label>
+        <label class="slider"><span>游動速度</span><output id="speed-value"></output><input type="range" id="speed" min="0.25" max="3" step="0.05"></label>
+        <label class="slider"><span>字元大小</span><output id="glyph-value"></output><input type="range" id="glyph-scale" min="0.4" max="1" step="0.05"></label>
+        <label class="slider"><span>小魚數量</span><output id="fish-value"></output><input type="range" id="fish-scale" min="0.2" max="4" step="0.1"></label>
       </div>
-      <div class="section-head">
-        <h3>鯊魚 <small id="shark-count"></small></h3>
-        <button type="button" id="shark-add" class="text-button">＋ 新增</button>
-      </div>
+      <div class="section-head"><h3>鯊魚 <small id="shark-count"></small></h3><button type="button" id="shark-add" class="text-button">＋ 新增</button></div>
       <div id="shark-list"></div>
       <footer><button type="button" id="ocean-reset" class="text-button">恢復預設</button></footer>
     </section>
