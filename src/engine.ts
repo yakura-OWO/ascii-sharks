@@ -19,12 +19,15 @@ export class OceanEngine {
   private resizeObserver: ResizeObserver;
   private intersectionObserver: IntersectionObserver;
   private disposed = false;
+  /** Simulation time multiplier; can be changed while running. */
+  speed = 1;
 
   constructor(
     private canvas: HTMLCanvasElement,
     sharks?: SharkSpec[],
-    options: { fishScale?: number; sharkColors?: (string | null)[]; glyphScale?: number } = {},
+    options: { fishScale?: number; sharkColors?: (string | null)[]; glyphScale?: number; speed?: number } = {},
   ) {
+    this.speed = options.speed ?? 1;
     this.world = new World(sharks, undefined, options.fishScale);
     this.renderer = new AsciiRenderer(canvas);
     if (options.glyphScale) this.renderer.glyphScale = options.glyphScale;
@@ -83,7 +86,7 @@ export class OceanEngine {
   }
 
   private frame = (now: number) => {
-    const dt = Math.min(0.1, (now - this.last) / 1000);
+    const dt = Math.min(0.1, (now - this.last) / 1000) * this.speed;
     this.last = now;
     this.acc += dt;
     let steps = 0;

@@ -37,9 +37,10 @@ document.querySelector<HTMLFormElement>("#search")!.addEventListener("submit", e
   if (text) location.href = destination(text);
 });
 
-// Ocean: rebuilt from scratch whenever the settings change.
+// Ocean: rebuilt from scratch when its population changes; speed and theme apply live.
 type SharkSetting = { kind: SharkKind; size: number; color: string | null };
-type Ocean = { sharks: SharkSetting[]; fishScale: number; glyphScale: number };
+type Theme = "light" | "dark" | "system";
+type Ocean = { sharks: SharkSetting[]; fishScale: number; glyphScale: number; speed: number; theme: Theme };
 const oceanKey = "ascii-sharks-ocean";
 const kinds: [SharkKind, string][] = [
   ["classic", "經典鯊"], ["hammerhead", "雙髻鯊"], ["greathammer", "大雙髻鯊"], ["tiger", "虎鯊"],
@@ -47,7 +48,9 @@ const kinds: [SharkKind, string][] = [
 ];
 // Rough look of the built-in tints, shown in the colour picker until one is chosen.
 const builtInColors = ["#3ad0e6", "#c25ae6", "#e6a038", "#4ad874"];
-const defaultOcean = (): Ocean => ({ sharks: DEFAULT_SHARKS.map(s => ({ ...s, color: null })), fishScale: 1, glyphScale: 0.6 });
+const defaultOcean = (): Ocean => ({
+  sharks: DEFAULT_SHARKS.map(s => ({ ...s, color: null })), fishScale: 1, glyphScale: 0.6, speed: 1, theme: "dark",
+});
 let ocean = defaultOcean();
 let engine: OceanEngine | undefined;
 const canvas = document.querySelector("canvas")!;
@@ -57,74 +60,165 @@ function startOcean() {
   engine = new OceanEngine(canvas, ocean.sharks.map(({ kind, size }) => ({ kind, size })), {
     fishScale: ocean.fishScale,
     glyphScale: ocean.glyphScale,
+    speed: ocean.speed,
     sharkColors: ocean.sharks.map(s => s.color),
   });
 }
-function changeOcean() {
+function changeOcean(restart = true) {
   store(oceanKey, ocean);
   renderOcean();
-  startOcean();
+  if (restart) startOcean();
 }
+
+const lightQuery = matchMedia("(prefers-color-scheme: light)");
+function applyTheme() {
+  // theme.js reads this mirror synchronously on the next load to avoid a flash.
+  try { localStorage.setItem("ascii-sharks-theme", ocean.theme); } catch { /* Only costs a flash. */ }
+  const light = ocean.theme === "light" || (ocean.theme === "system" && lightQuery.matches);
+  document.documentElement.dataset.theme = light ? "light" : "dark";
+}
+lightQuery.addEventListener("change", applyTheme);
+for (const button of document.querySelectorAll<HTMLButtonElement>("[data-theme-choice]")) {
+  button.addEventListener("click", () => { ocean.theme = button.dataset.themeChoice as Theme; applyTheme(); changeOcean(false); });
+}
+
+// Native <select> popups can't be styled, so the kind picker is a popover listbox.
+const listbox = document.createElement("div");
+listbox.className = "listbox";
+listbox.setAttribute("role", "listbox");
+listbox.popover = "auto";
+document.querySelector("#ocean-panel")!.append(listbox);
+let listboxOwner: HTMLButtonElement | null = null;
+listbox.addEventListener("toggle", (event: any) => {
+  if (event.newState === "closed") { listboxOwner?.setAttribute("aria-expanded", "false"); listboxOwner = null; }
+});
+function dropdown(value: SharkKind, onPick: (kind: SharkKind) => void) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "dropdown";
+  button.textContent = kinds.find(([k]) => k === value)![1];
+  button.setAttribute("aria-haspopup", "listbox");
+  button.setAttribute("aria-expanded", "false");
+  button.addEventListener("click", () => {
+    const reopen = listboxOwner !== button;
+    if (listboxOwner) listbox.hidePopover();
+    if (!reopen) return;
+    listbox.replaceChildren(...kinds.map(([kind, label]) => {
+      const option = document.createElement("button");
+      option.type = "button";
+      option.setAttribute("role", "option");
+      option.setAttribute("aria-selected", String(kind === value));
+      option.textContent = label;
+      option.addEventListener("click", () => { listbox.hidePopover(); if (kind !== value) onPick(kind); });
+      return option;
+    }));
+    listboxOwner = button;
+    button.setAttribute("aria-expanded", "true");
+    listbox.showPopover();
+    const rect = button.getBoundingClientRect();
+    const height = listbox.offsetHeight;
+    const below = rect.bottom + 6 + height < innerHeight;
+    listbox.style.left = `${rect.left}px`;
+    listbox.style.top = `${below ? rect.bottom + 6 : Math.max(8, rect.top - 6 - height)}px`;
+    listbox.querySelector<HTMLElement>("[aria-selected=true]")?.focus();
+  });
+  return button;
+}
+
+function fill(input: HTMLInputElement) {
+  const p = (Number(input.value) - Number(input.min)) / (Number(input.max) - Number(input.min));
+  input.style.setProperty("--p", `${p * 100}%`);
+}
+document.addEventListener("input", event => {
+  const input = event.target as HTMLInputElement;
+  if (input.type === "range") fill(input);
+});
+
 const sharkList = document.querySelector<HTMLElement>("#shark-list")!;
-const fishScale = document.querySelector<HTMLInputElement>("#fish-scale")!;
-const fishValue = document.querySelector<HTMLOutputElement>("#fish-value")!;
-const glyphScale = document.querySelector<HTMLInputElement>("#glyph-scale")!;
-const glyphValue = document.querySelector<HTMLOutputElement>("#glyph-value")!;
 const sharkAdd = document.querySelector<HTMLButtonElement>("#shark-add")!;
+// set() returns whether the ocean has to be rebuilt.
+const sliders = [
+  { id: "speed", get: () => ocean.speed, set: (v: number) => { ocean.speed = v; if (engine) engine.speed = v; return false; }, label: (v: number) => `${+v.toFixed(2)}×` },
+  { id: "glyph-scale", get: () => ocean.glyphScale, set: (v: number) => { ocean.glyphScale = v; return true; }, label: (v: number) => `${Math.round(v * 100)}%` },
+  { id: "fish-scale", get: () => ocean.fishScale, set: (v: number) => { ocean.fishScale = v; return true; }, label: (v: number) => `${Math.round(v * 100)}%` },
+].map(s => ({
+  ...s,
+  input: document.querySelector<HTMLInputElement>(`#${s.id}`)!,
+  output: document.querySelector<HTMLOutputElement>(`#${s.id.split("-")[0]}-value`)!,
+}));
+for (const s of sliders) {
+  s.input.addEventListener("input", () => {
+    s.output.textContent = s.label(Number(s.input.value));
+    // Speed is cheap to change, so it follows the thumb; the others rebuild the ocean on release.
+    if (s.id === "speed") s.set(Number(s.input.value));
+  });
+  s.input.addEventListener("change", () => changeOcean(s.set(Number(s.input.value))));
+}
+
 function renderOcean() {
   sharkList.replaceChildren();
   ocean.sharks.forEach((shark, index) => {
     const row = document.createElement("div");
     row.className = "shark-row";
-    const kind = document.createElement("select");
-    kind.setAttribute("aria-label", "種類");
-    for (const [value, label] of kinds) kind.add(new Option(label, value, false, value === shark.kind));
-    kind.addEventListener("change", () => { shark.kind = kind.value as SharkKind; changeOcean(); });
-    const size = document.createElement("input");
-    size.type = "range";
-    size.min = "0.4"; size.max = "1.3"; size.step = "0.05";
-    size.value = String(shark.size);
-    size.title = size.ariaLabel = "大小";
-    size.addEventListener("change", () => { shark.size = Number(size.value); changeOcean(); });
     const color = document.createElement("input");
     color.type = "color";
     color.value = shark.color ?? builtInColors[index % builtInColors.length];
     color.title = color.ariaLabel = "顏色";
     color.addEventListener("change", () => { shark.color = color.value; changeOcean(); });
+    const kind = dropdown(shark.kind, picked => { shark.kind = picked; changeOcean(); });
+    kind.title = "種類";
+    const size = document.createElement("input");
+    size.type = "range";
+    size.min = "0.4"; size.max = "1.3"; size.step = "0.05";
+    size.value = String(shark.size);
+    size.title = size.ariaLabel = "大小";
+    fill(size);
+    size.addEventListener("change", () => { shark.size = Number(size.value); changeOcean(); });
     const reset = document.createElement("button");
     reset.type = "button";
+    reset.className = "icon-button";
     reset.textContent = "↺";
     reset.title = reset.ariaLabel = "恢復原色";
     reset.disabled = shark.color === null;
     reset.addEventListener("click", () => { shark.color = null; changeOcean(); });
     const remove = document.createElement("button");
     remove.type = "button";
-    remove.textContent = "×";
+    remove.className = "icon-button";
+    remove.textContent = "✕";
     remove.title = remove.ariaLabel = "移除這隻鯊魚";
     remove.disabled = ocean.sharks.length <= 1;
     remove.addEventListener("click", () => { ocean.sharks.splice(index, 1); changeOcean(); });
-    row.append(kind, size, color, reset, remove);
+    row.append(color, kind, size, reset, remove);
     sharkList.append(row);
   });
   document.querySelector("#shark-count")!.textContent = `${ocean.sharks.length} / 8`;
   sharkAdd.disabled = ocean.sharks.length >= 8;
-  fishScale.value = String(ocean.fishScale);
-  fishValue.textContent = `${Math.round(ocean.fishScale * 100)}%`;
-  glyphScale.value = String(ocean.glyphScale);
-  glyphValue.textContent = `${Math.round(ocean.glyphScale * 100)}%`;
+  for (const s of sliders) {
+    s.input.value = String(s.get());
+    s.output.textContent = s.label(s.get());
+    fill(s.input);
+  }
+  for (const button of document.querySelectorAll<HTMLButtonElement>("[data-theme-choice]")) {
+    button.setAttribute("aria-checked", String(button.dataset.themeChoice === ocean.theme));
+  }
 }
 sharkAdd.addEventListener("click", () => { ocean.sharks.push({ kind: "classic", size: 0.8, color: null }); changeOcean(); });
-fishScale.addEventListener("input", () => { fishValue.textContent = `${Math.round(Number(fishScale.value) * 100)}%`; });
-fishScale.addEventListener("change", () => { ocean.fishScale = Number(fishScale.value); changeOcean(); });
-glyphScale.addEventListener("input", () => { glyphValue.textContent = `${Math.round(Number(glyphScale.value) * 100)}%`; });
-glyphScale.addEventListener("change", () => { ocean.glyphScale = Number(glyphScale.value); changeOcean(); });
-document.querySelector("#ocean-reset")!.addEventListener("click", () => { ocean = defaultOcean(); changeOcean(); });
+document.querySelector("#ocean-reset")!.addEventListener("click", () => { ocean = { ...defaultOcean(), theme: ocean.theme }; changeOcean(); });
 
-load<Ocean>(oceanKey).then(saved => {
+load<Partial<Ocean>>(oceanKey).then(saved => {
   const known = new Set(kinds.map(([k]) => k));
+  const num = (v: unknown, fallback: number) => typeof v === "number" && isFinite(v) ? v : fallback;
   if (saved && Array.isArray(saved.sharks) && saved.sharks.length && saved.sharks.every(s => known.has(s?.kind) && typeof s.size === "number")) {
-    ocean = { sharks: saved.sharks.slice(0, 8), fishScale: typeof saved.fishScale === "number" ? saved.fishScale : 1, glyphScale: typeof saved.glyphScale === "number" ? saved.glyphScale : 0.6 };
+    const base = defaultOcean();
+    ocean = {
+      sharks: saved.sharks.slice(0, 8),
+      fishScale: num(saved.fishScale, base.fishScale),
+      glyphScale: num(saved.glyphScale, base.glyphScale),
+      speed: num(saved.speed, base.speed),
+      theme: saved.theme === "light" || saved.theme === "system" ? saved.theme : "dark",
+    };
   }
+  applyTheme();
   renderOcean();
   startOcean();
 });
@@ -166,6 +260,7 @@ document.addEventListener("click", event => {
   if (!event.composedPath().some(el => el instanceof Element && el.classList.contains("panel"))) closeMenus();
 });
 document.addEventListener("keydown", event => { if (event.key === "Escape") closeMenus(); });
+document.querySelector("#ocean-close")!.addEventListener("click", () => closeMenus());
 
 const avatarKey = "ascii-sharks-avatar";
 const person = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 12a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9zm0 2c-4 0-9 2-9 6v1h18v-1c0-4-5-6-9-6z"/></svg>';
