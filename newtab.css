@@ -1,6 +1,8 @@
 :root{color-scheme:dark;--bg:#000;--text:#e8eaed;--muted:#9aa0a6;--line:#ffffff1f;--line-strong:#ffffff40;--hover:#ffffff1a;--field:#ffffff0d;--glass:rgba(22,26,32,.5);--search:rgba(255,255,255,.035);--search-hover:rgba(255,255,255,.07);--accent:#a8c7fa;--on-accent:#062e6f;--danger:#ffb4a9;--shadow:#000a;--halo:#000;--track:#ffffff24}
 :root[data-theme=light]{color-scheme:light;--bg:#fff;--text:#1f1f1f;--muted:#5f6368;--line:#0000001a;--line-strong:#0000003a;--hover:#0000000d;--field:#0000000a;--glass:rgba(255,255,255,.55);--search:rgba(255,255,255,.2);--search-hover:rgba(255,255,255,.4);--accent:#0b57d0;--on-accent:#fff;--danger:#b3261e;--shadow:#0002;--halo:#fff;--track:#0000001f}
 :root{font-family:"Segoe UI",Arial,"Microsoft JhengHei",sans-serif;color:var(--text);background:var(--bg)}*{box-sizing:border-box}[hidden]{display:none!important}body{margin:0;min-height:100vh;background:var(--bg)}
+/* No text selection outside inputs: rapid clicks would select labels, and a press on a selection starts a native drag that grabs the mouse. */
+:not(input){-webkit-user-select:none;user-select:none}
 canvas{position:fixed;inset:0;width:100%;height:100%;font-family:Consolas,monospace;transition:filter .3s}[data-theme=light] canvas{filter:invert(1) hue-rotate(180deg)}
 a{color:inherit;text-decoration:none}button,input{font:inherit;color:inherit}button,a,input{outline-offset:4px}button{cursor:pointer}:focus-visible{outline:2px solid var(--accent)}
 
