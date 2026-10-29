@@ -64,6 +64,61 @@ const MARK_GLYPHS = "#%@";
 
 // Sub-cell sample offsets for anti-aliased silhouettes.
 const SUBSAMPLES = [0.25, 0.3, 0.75, 0.3, 0.25, 0.72, 0.75, 0.72];
+/** Below this font size glyphs blur into dots, so tiny cells draw plain pixels instead. */
+const MIN_GLYPH_PX = 5;
+
+const EXTENT_BINS = 64;
+const extentCache = new Map<SharkShape, Float32Array>();
+/**
+ * How far from the spine (as a fraction of length) any part of the shape can
+ * reach at each position along it: body, fins at their widest bank, and the
+ * cephalofoil. Lets the rasteriser skip supersampling open water next to the body.
+ */
+function shapeExtent(shape: SharkShape) {
+  let table = extentCache.get(shape);
+  if (table) return table;
+  table = new Float32Array(EXTENT_BINS);
+  const finTip = shape.pectoral[3] * 1.06 * 1.35;
+  const [p0, p1, p2] = shape.pectoral;
+  const [v0, v1, v2, vr] = shape.pelvic;
+  const head = shape.head;
+  for (let b = 0; b < EXTENT_BINS; b++) {
+    const lo = b / EXTENT_BINS;
+    const hi = (b + 1) / EXTENT_BINS;
+    let e = 0;
+    for (let k = 0; k <= 8; k++) e = Math.max(e, shape.halfWidth(lo + ((hi - lo) * k) / 8));
+    if (hi >= Math.min(p0, p1, p2) && lo <= Math.max(p0, p1, p2)) e = Math.max(e, finTip);
+    if (hi >= Math.min(v0, v1, v2) && lo <= Math.max(v0, v1, v2)) e = Math.max(e, vr);
+    if (shape.caudal > 0 && hi >= 0.86) e = Math.max(e, shape.caudal);
+    if (head && lo <= head.sweep + head.depth + head.notch) e = Math.max(e, head.span);
+    table[b] = e;
+  }
+  extentCache.set(shape, table);
+  return table;
+}
+
+/** Largest extent within pad bins of position s. */
+function reachNear(extent: Float32Array, s: number, pad: number) {
+  const b = Math.min(EXTENT_BINS - 1, Math.floor(s * EXTENT_BINS));
+  let e = 0;
+  for (let k = Math.max(0, b - pad); k <= Math.min(EXTENT_BINS - 1, b + pad); k++) e = Math.max(e, extent[k]);
+  return e;
+}
+
+const rgbCache = new Map<number, string>();
+/** Cached `rgb()` strings; shark cells rebuild the same few hundred colours every frame. */
+function rgb(r: number, g: number, b: number) {
+  const key = (r << 16) | (g << 8) | b;
+  let style = rgbCache.get(key);
+  if (!style) {
+    style = `rgb(${r},${g},${b})`;
+    rgbCache.set(key, style);
+  }
+  return style;
+}
+
+/** Shark rasterising walks the bounding box in TILE×TILE cell blocks. */
+const TILE = 8;
 
 /** Classic top-down half-width at s ∈ [0, 1] (snout → tail), as a fraction of length. */
 function classicHalfWidth(s: number) {
@@ -332,6 +387,13 @@ export class AsciiRenderer {
   private hitS = 0;
   private hitV = 0;
   private hitDist = 0;
+  /** Body half-width at the hit, or 0 when the point is off the body. */
+  private hitW = 0;
+  /** Per-segment midpoints and half-lengths of the render spine, for pruning. */
+  private segMid = new Float32Array((SHARK_NODES - 1) * 2);
+  private segHalf = new Float32Array(SHARK_NODES - 1);
+  /** Segment nearest the previous sample; tried first since neighbours share it. */
+  private segHint = 0;
 
   /** Cells holding a fish this frame (frame stamp); dots skip them. */
   private fishStamp = new Uint32Array(0);
@@ -339,6 +401,8 @@ export class AsciiRenderer {
   /** Fish cells bucketed by brightness, so each bucket is one fillStyle. */
   private fishBuckets: number[][] = FISH_ALPHAS.map(() => []);
   private fishStyles = FISH_ALPHAS.map((a) => `rgba(230,238,255,${a})`);
+  /** A dash glyph only a few px tall renders faint, so tiny bars are dimmed to match. */
+  private tinyFishStyles = FISH_ALPHAS.map((a) => `rgba(230,238,255,${(a * 0.33).toFixed(3)})`);
   private ripples: { x: number; y: number; born: number }[] = [];
 
   constructor(private canvas: HTMLCanvasElement) {
@@ -590,14 +654,22 @@ export class AsciiRenderer {
    * Writes hit* fields and returns whether the point is on the shark.
    */
   private sampleShark(px: number, py: number, L: number) {
-    const { spine, arc } = this;
+    const { spine, arc, segMid, segHalf } = this;
     const N = SHARK_NODES;
     let best = Infinity;
+    let bestA = Infinity;
+    let bestK = N;
     let bestS = 0;
     let bestSign = 1;
     let bestNx = 0;
     let bestNy = 0;
-    for (let k = 0; k < N - 1; k++) {
+    for (let j = 0; j < N - 1; j++) {
+      // Start at the hint, then skip any segment that can't beat the best so far.
+      const k = (j + this.segHint) % (N - 1);
+      const mx = px - segMid[k * 2];
+      const my = py - segMid[k * 2 + 1];
+      const reach = bestA + segHalf[k];
+      if (mx * mx + my * my > reach * reach) continue;
       const ax = spine[k * 2];
       const ay = spine[k * 2 + 1];
       const sx = spine[(k + 1) * 2] - ax;
@@ -607,8 +679,11 @@ export class AsciiRenderer {
       const qx = ax + sx * u;
       const qy = ay + sy * u;
       const d2 = (px - qx) ** 2 + (py - qy) ** 2;
-      if (d2 < best) {
+      // Ties go to the lower segment, as in a plain front-to-back scan.
+      if (d2 < best || (d2 === best && k < bestK)) {
         best = d2;
+        bestA = Math.sqrt(d2);
+        bestK = k;
         const len = Math.sqrt(len2);
         bestS = (arc[k] + u * len) / this.arcTotal;
         bestSign = sx * (py - ay) - sy * (px - ax) >= 0 ? 1 : -1;
@@ -617,7 +692,8 @@ export class AsciiRenderer {
       }
     }
 
-    const a = Math.sqrt(best);
+    this.segHint = bestK;
+    const a = bestA;
     const s = bestS;
     const u = s * L;
     const shape = this.shape;
@@ -625,6 +701,7 @@ export class AsciiRenderer {
     this.hitDist = a;
     this.hitS = s;
     this.hitV = a * bestSign;
+    this.hitW = 0;
 
     const head = this.shape.head;
     if (head && u < L * (head.sweep + head.depth + head.notch)) {
@@ -643,6 +720,7 @@ export class AsciiRenderer {
     }
 
     if (a <= w) {
+      this.hitW = w;
       const across = a / (w || 1);
       // Rounded back lit from the top-left; flanks fall off into shadow.
       const facing = (bestNx * -0.6 + bestNy * -0.8) * across;
@@ -762,6 +840,12 @@ export class AsciiRenderer {
           Math.hypot(spine[k * 2] - spine[(k - 1) * 2], spine[k * 2 + 1] - spine[(k - 1) * 2 + 1]);
       }
       this.arcTotal = arc[N - 1] || 1;
+      const { segMid, segHalf } = this;
+      for (let k = 0; k < N - 1; k++) {
+        segMid[k * 2] = (spine[k * 2] + spine[(k + 1) * 2]) / 2;
+        segMid[k * 2 + 1] = (spine[k * 2 + 1] + spine[(k + 1) * 2 + 1]) / 2;
+        segHalf[k] = (arc[k + 1] - arc[k]) / 2;
+      }
 
       // Bank into turns: the inside fin foreshortens, the outside one spreads.
       const bank = clamp(sh.turn * 0.45, -0.35, 0.35);
@@ -791,42 +875,65 @@ export class AsciiRenderer {
       const shadowDc = Math.round((L * 0.035) / cw) + 1;
       const shadowDr = Math.round((L * 0.02) / ch) + 1;
 
-      for (let r = r0; r <= r1; r++) {
-        for (let c = c0; c <= c1; c++) {
-          const x = c * cw;
-          const y = r * ch;
-          const centerHit = this.sampleShark(x + cw / 2, y + ch / 2, L);
-          if (!centerHit && this.hitDist > skipBeyond) continue;
-          const flag = this.hitFlag;
-          const shade = this.hitShade;
-          const s = this.hitS;
-          const v = this.hitV;
+      // Cells within a cell diagonal of the body's edge get supersampled;
+      // deeper ones are fully covered anyway.
+      const diag = Math.hypot(cw, ch);
+      const extent = shapeExtent(this.shape);
+      // A subsample sits within a cell of the centre, so its s can drift a few bins.
+      const binPad = Math.ceil((diag / L) * EXTENT_BINS) + 1;
+      const tileR = Math.hypot(TILE * cw, TILE * ch) / 2;
 
-          let hits = centerHit ? 1 : 0;
-          for (let k = 0; k < SUBSAMPLES.length; k += 2) {
-            if (this.sampleShark(x + SUBSAMPLES[k] * cw, y + SUBSAMPLES[k + 1] * ch, L)) hits++;
-          }
-          if (hits === 0) continue;
-          const coverage = hits / 5;
-
-          const i = r * cols + c;
-          // Body-anchored key so each glyph rides along with the skin.
-          const key = (hash3(Math.round(s * 52), Math.round(v / (cw * 0.9)), sh.id) * 4294967295) >>> 0;
-          sharkKey[i] = key;
-          sharkDepth[i] = sh.depth;
-          sharkKind[i] = kindIndex;
-          this.sharkColor[i] = (sh.id - 1) & 255;
-
-          if (centerHit && coverage >= 0.6) {
-            sharkFlag[i] = flag;
-            const flicker = (hash3(c, r, Math.floor(t * 6)) - 0.5) * 0.06;
-            sharkShade[i] = clamp(shade + flicker, 0, 1);
-            const sc = c + shadowDc;
-            const sr = r + shadowDr;
-            if (sc < cols && sr < rows) sharkShadow[sr * cols + sc] = 1;
-          } else {
-            sharkFlag[i] = FLAG_EDGE;
-            sharkShade[i] = coverage;
+      for (let tr = r0; tr <= r1; tr += TILE) {
+        for (let tc = c0; tc <= c1; tc += TILE) {
+          // Skip whole tiles of open water: nothing in them is near the shark.
+          this.sampleShark((tc + TILE / 2) * cw, (tr + TILE / 2) * ch, L);
+          if (this.hitDist - tileR > skipBeyond) continue;
+          const rEnd = Math.min(r1, tr + TILE - 1);
+          const cEnd = Math.min(c1, tc + TILE - 1);
+          for (let r = tr; r <= rEnd; r++) {
+            for (let c = tc; c <= cEnd; c++) {
+              const x = c * cw;
+              const y = r * ch;
+              const centerHit = this.sampleShark(x + cw / 2, y + ch / 2, L);
+              if (!centerHit && this.hitDist > skipBeyond) continue;
+              const flag = this.hitFlag;
+              const shade = this.hitShade;
+              const s = this.hitS;
+              const v = this.hitV;
+    
+              let hits = centerHit ? 1 : 0;
+              if (centerHit && this.hitDist + diag <= this.hitW) {
+                hits = 5;
+              } else if (!centerHit && this.hitDist > reachNear(extent, s, binPad) * L + diag) {
+                continue;
+              } else {
+                for (let k = 0; k < SUBSAMPLES.length; k += 2) {
+                  if (this.sampleShark(x + SUBSAMPLES[k] * cw, y + SUBSAMPLES[k + 1] * ch, L)) hits++;
+                }
+              }
+              if (hits === 0) continue;
+              const coverage = hits / 5;
+    
+              const i = r * cols + c;
+              // Body-anchored key so each glyph rides along with the skin.
+              const key = (hash3(Math.round(s * 52), Math.round(v / (cw * 0.9)), sh.id) * 4294967295) >>> 0;
+              sharkKey[i] = key;
+              sharkDepth[i] = sh.depth;
+              sharkKind[i] = kindIndex;
+              this.sharkColor[i] = (sh.id - 1) & 255;
+    
+              if (centerHit && coverage >= 0.6) {
+                sharkFlag[i] = flag;
+                const flicker = (hash3(c, r, Math.floor(t * 6)) - 0.5) * 0.06;
+                sharkShade[i] = clamp(shade + flicker, 0, 1);
+                const sc = c + shadowDc;
+                const sr = r + shadowDr;
+                if (sc < cols && sr < rows) sharkShadow[sr * cols + sc] = 1;
+              } else {
+                sharkFlag[i] = FLAG_EDGE;
+                sharkShade[i] = coverage;
+              }
+            }
           }
         }
       }
@@ -836,6 +943,9 @@ export class AsciiRenderer {
   private drawSharks(t: number) {
     const { ctx, cols, rows, cw, ch, sharkFlag, sharkShade, sharkKey, sharkDepth, sharkKind } = this;
     const n = cols * rows;
+    // At tiny sizes the dark skin glyphs barely show over their block, so
+    // only the bright ones (edges, accents, eyes) are still drawn as text.
+    const tiny = Math.round(ch * 0.74) < MIN_GLYPH_PX;
     for (let i = 0; i < n; i++) {
       const flag = sharkFlag[i];
       if (!flag) continue;
@@ -861,7 +971,7 @@ export class AsciiRenderer {
         ctx.fillStyle =
           roll < 0.07
             ? ACCENTS[key % ACCENTS.length]
-            : `rgb(${Math.round(g * tr)},${Math.round(g * tg)},${Math.min(255, Math.round(g * tb + 6))})`;
+            : rgb(Math.round(g * tr), Math.round(g * tg), Math.min(255, Math.round(g * tb + 6)));
         ctx.fillText(set[(key >>> 8) % set.length], x + cw / 2, y + ch / 2 + 1);
         continue;
       }
@@ -885,16 +995,18 @@ export class AsciiRenderer {
         const jitter = ((key >>> 4) % 3) - 1;
         glyph = SKIN_RAMP[clamp(Math.floor((1 - shade) * 8.99) + jitter, 0, SKIN_RAMP.length - 1)];
       }
-      level *= dim;
+      // Tiny cells skip their dark glyph; dim the block slightly to keep the same tone.
+      level *= tiny ? dim * 0.92 : dim;
       // Tinted per species; the classic tint is a cool blue-grey, like a back seen through deep water.
-      ctx.fillStyle = `rgb(${Math.min(255, Math.round(level * tr))},${Math.min(255, Math.round(level * tg))},${Math.min(255, Math.round(level * tb + 4))})`;
+      ctx.fillStyle = rgb(Math.min(255, Math.round(level * tr)), Math.min(255, Math.round(level * tg)), Math.min(255, Math.round(level * tb + 4)));
       ctx.fillRect(x + 1, y + 1, cw - 1, ch - 1);
 
       let color: string;
       if (flag === FLAG_EYE) color = "#9aa0ad";
-      else if (flag === FLAG_MARK) color = `rgb(${Math.round(70 * tr)},${Math.round(70 * tg)},${Math.round(70 * tb)})`;
+      else if (flag === FLAG_MARK) color = rgb(Math.round(70 * tr), Math.round(70 * tg), Math.round(70 * tb));
       else if (roll < 0.09) color = ACCENTS[key % ACCENTS.length];
       else if (roll < 0.13) color = "#ffffff";
+      else if (tiny) continue;
       else color = shade > 0.55 ? "#0e0f13" : "#1b1d24";
       ctx.fillStyle = color;
       ctx.fillText(glyph, x + cw / 2, y + ch / 2 + 1);
@@ -927,12 +1039,18 @@ export class AsciiRenderer {
 
   private drawFish() {
     const { ctx, cw, ch, cols, fishBuckets } = this;
+    const tiny = Math.round(ch * 0.74) < MIN_GLYPH_PX;
+    // At tiny sizes the dash is drawn as a short 1px bar.
+    const barW = Math.max(1, Math.round(cw * 0.8));
+    const barX = Math.floor((cw - barW) / 2);
+    const barY = Math.floor(ch / 2);
     for (let b = 0; b < fishBuckets.length; b++) {
       const bucket = fishBuckets[b];
       if (!bucket.length) continue;
-      ctx.fillStyle = this.fishStyles[b];
+      ctx.fillStyle = tiny ? this.tinyFishStyles[b] : this.fishStyles[b];
       for (const i of bucket) {
-        ctx.fillText("-", (i % cols) * cw + cw / 2, ((i / cols) | 0) * ch + ch / 2 + 1);
+        if (tiny) ctx.fillRect((i % cols) * cw + barX, ((i / cols) | 0) * ch + barY, barW, 1);
+        else ctx.fillText("-", (i % cols) * cw + cw / 2, ((i / cols) | 0) * ch + ch / 2 + 1);
       }
     }
   }
