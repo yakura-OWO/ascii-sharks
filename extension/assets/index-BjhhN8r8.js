@@ -1868,18 +1868,30 @@ const apps = [
   ["新聞", "https://news.google.com/"]
 ];
 const appsPanel = document.querySelector("#apps");
+const appIcons = [];
 for (const [name, url] of apps) {
   const a = document.createElement("a");
   a.href = url;
   const icon = document.createElement("span");
   icon.className = "app-icon";
   icon.textContent = name.slice(0, 1);
-  favicon(url, new Image(), icon);
+  appIcons.push([url, icon]);
   const label = document.createElement("span");
   label.textContent = name;
   a.append(icon, label);
   appsPanel.append(a);
 }
+let appIconsLoaded = false;
+document.querySelector("#apps-button").addEventListener("click", () => {
+  if (appIconsLoaded) return;
+  appIconsLoaded = true;
+  for (const [url, icon] of appIcons) {
+    const img = new Image();
+    img.alt = "";
+    img.onload = () => icon.replaceChildren(img);
+    img.src = `https://www.google.com/s2/favicons?sz=64&domain_url=${encodeURIComponent(url)}`;
+  }
+});
 const menus = [["#apps-button", "#apps"], ["#avatar-button", "#account"], ["#ocean-button", "#ocean-panel"]].map(([b, p]) => [document.querySelector(b), document.querySelector(p)]);
 function closeMenus(except) {
   for (const [button, panel] of menus) if (panel !== except) {
