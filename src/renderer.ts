@@ -7,7 +7,7 @@
  *      shaded by the light, dense glyphs, and shimmering accent colours
  */
 import { clamp, hash3, smoothstep } from "./math";
-import { SHARK_NODES, type Shark, type SharkKind, type World } from "./world";
+import { RIPPLE_LIFE, RIPPLE_RINGS, RIPPLE_SPEED, SHARK_NODES, type Shark, type SharkKind, type World } from "./world";
 
 const ALPHA_LEVELS = 6;
 const FISH_ALPHAS = [0.28, 0.42, 0.58, 0.74, 0.9];
@@ -30,6 +30,17 @@ const SHARK_COLORS: [number, number, number][] = [
   [1.2, 0.72, 0.2],
   [0.3, 1.15, 0.5],
 ];
+
+/** Glyph scale the fish population and effect sizes were tuned at. */
+export const REFERENCE_GLYPH_SCALE = 0.6;
+
+export function cellWidthFor(width: number, glyphScale: number) {
+  return clamp(Math.round((width / 124) * glyphScale), 2, 13);
+}
+
+export function cellHeightFor(cellWidth: number) {
+  return Math.round(cellWidth * 1.45);
+}
 
 const ACCENTS = ["#e0892c", "#e03a32", "#b44ae0", "#33c8cc", "#3cb54a", "#3150e8", "#d9c14a"];
 
@@ -328,6 +339,7 @@ export class AsciiRenderer {
   /** Fish cells bucketed by brightness, so each bucket is one fillStyle. */
   private fishBuckets: number[][] = FISH_ALPHAS.map(() => []);
   private fishStyles = FISH_ALPHAS.map((a) => `rgba(230,238,255,${a})`);
+  private ripples: { x: number; y: number; born: number }[] = [];
 
   constructor(private canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext("2d", { alpha: false });
@@ -372,7 +384,7 @@ export class AsciiRenderer {
     this.height = height;
     this.dpr = dpr;
     this.cw = clamp(Math.round((width / 124) * this.glyphScale), 2, 13);
-    this.ch = Math.round(this.cw * 1.45);
+    this.ch = cellHeightFor(this.cw);
     this.cols = Math.ceil(width / this.cw);
     this.rows = Math.ceil(height / this.ch);
 
@@ -428,6 +440,7 @@ export class AsciiRenderer {
     const t = world.time;
 
     this.consumeEvents(world);
+    this.depositRipples(t);
     this.rasterizeSharks(world.sharks, t);
     this.depositWake(world);
     this.diffuse(dt);
@@ -474,13 +487,60 @@ export class AsciiRenderer {
   private consumeEvents(world: World) {
     for (const e of world.events) {
       if (e.kind === "eat") {
-        this.stamp(this.heat, e.x, e.y, 2, 1);
-        this.stamp(this.energy, e.x, e.y, 3, 0.9);
+        this.stamp(this.heat, e.x, e.y, this.cellsFor(18), 1);
+        this.stamp(this.energy, e.x, e.y, this.cellsFor(27), 0.9);
       } else {
-        this.stamp(this.energy, e.x, e.y, 6, 1.4);
+        this.stamp(this.energy, e.x, e.y, this.cellsFor(8), 1.2);
+        this.ripples.push({ x: e.x, y: e.y, born: world.time });
       }
     }
     world.events.length = 0;
+  }
+
+  /** A px radius in whole cells, so effects keep their size as glyphs shrink. */
+  private cellsFor(px: number) {
+    return Math.max(1, Math.round(px / this.cw));
+  }
+
+  /**
+   * Each ripple is a few concentric rings spreading outward and fading.
+   * They light the wake field along a thin band, so the diffusion softens
+   * their trailing edge.
+   */
+  private depositRipples(t: number) {
+    const { cols, rows, cw, ch, energy } = this;
+    // Rings need to stay a couple of cells apart to read as separate rings.
+    const band = Math.max(cw * 0.8, 3);
+    const gap = Math.max(10, cw * 1.8);
+    this.ripples = this.ripples.filter((rp) => t - rp.born < RIPPLE_LIFE);
+    for (const rp of this.ripples) {
+      const age = t - rp.born;
+      const fade = 1 - age / RIPPLE_LIFE;
+      const outer = age * RIPPLE_SPEED;
+      const reach = outer + band;
+      const c0 = clamp(Math.floor((rp.x - reach) / cw), 0, cols - 1);
+      const c1 = clamp(Math.floor((rp.x + reach) / cw), 0, cols - 1);
+      const r0 = clamp(Math.floor((rp.y - reach) / ch), 0, rows - 1);
+      const r1 = clamp(Math.floor((rp.y + reach) / ch), 0, rows - 1);
+      for (let r = r0; r <= r1; r++) {
+        const dy = (r + 0.5) * ch - rp.y;
+        for (let c = c0; c <= c1; c++) {
+          const d = Math.hypot((c + 0.5) * cw - rp.x, dy);
+          let v = 0;
+          for (let k = 0; k < RIPPLE_RINGS; k++) {
+            const radius = outer - k * gap;
+            if (radius <= 0) break;
+            const off = Math.abs(d - radius);
+            // Inner rings are fainter, like a real ripple train.
+            if (off < band) v = Math.max(v, (1 - off / band) * (1 - k * 0.3));
+          }
+          if (v > 0) {
+            const i = r * cols + c;
+            energy[i] = Math.max(energy[i], 0.45 + v * fade * 0.9);
+          }
+        }
+      }
+    }
   }
 
   private depositWake(world: World) {

@@ -159,6 +159,11 @@ const DEFAULT_SHARKS = [
   { kind: "classic", size: 0.84 },
   { kind: "classic", size: 0.77 }
 ];
+const RIPPLE_SPEED = 51;
+const RIPPLE_LIFE = 2.2;
+const RIPPLE_RINGS = 3;
+const RIPPLE_FRONT = 14;
+const RIPPLE_PUSH = 320;
 const FISH_SEPARATION_K = 420;
 const FISH_ALIGN_K = 1.4;
 const FISH_COHESION_K = 1;
@@ -174,6 +179,7 @@ class World {
     __publicField(this, "sharks", []);
     __publicField(this, "events", []);
     __publicField(this, "pointer", { x: 0, y: 0, active: false });
+    __publicField(this, "splashes", []);
     /** Fish neighbourhood radius; the spatial hash bucket size matches it. */
     __publicField(this, "perception", 60);
     /** Per-species personal space in px (x, y). */
@@ -187,14 +193,18 @@ class World {
     __publicField(this, "bucketNext", new Int32Array(0));
     __publicField(this, "lastSpawn", 0);
     __publicField(this, "tmp", { x: 0, y: 0 });
+    /** Scales the population so fish per cell stays the same as glyphs shrink or grow. */
+    __publicField(this, "density", 1);
     this.sharkSpecs = sharkSpecs;
     this.fishCount = fishCount;
     this.fishScale = fishScale;
   }
-  resize(width, height, cellW, cellH) {
+  /** refCellArea is the cell size the population is tuned for; smaller cells get more fish. */
+  resize(width, height, cellW, cellH, refCellArea = cellW * cellH) {
     const first = this.width === 0;
     this.width = width;
     this.height = height;
+    this.density = refCellArea / (cellW * cellH);
     this.sepX = SPECIES.map((sp) => sp.spacing[0] * cellW);
     this.sepY = SPECIES.map((sp) => sp.spacing[1] * cellH);
     this.perception = Math.max(cellH * 3, cellW * 5.5);
@@ -248,7 +258,7 @@ class World {
       });
     }
     this.sharks.sort((a, b) => a.length - b.length);
-    const total = this.fishCount ?? Math.round(clamp(Math.round(W * H / 4400), 85, 340) * this.fishScale);
+    const total = this.fishCount ?? Math.round(clamp(Math.round(W * H / 4400), 85, 340) * this.fishScale * this.density);
     this.fish = [];
     while (this.fish.length < total) {
       const species = pickSpecies();
@@ -279,22 +289,32 @@ class World {
   }
   splash(x, y) {
     this.events.push({ kind: "splash", x, y });
-    const r = 240;
-    for (const f of this.fish) {
-      if (!f.alive) continue;
-      const dx = f.x - x;
-      const dy = f.y - y;
-      const d = Math.hypot(dx, dy);
-      if (d > r || d < 1e-3) continue;
-      const k = (1 - d / r) * 260;
-      f.vx += dx / d * k;
-      f.vy += dy / d * k;
-      f.alarm = 1;
+    this.splashes.push({ x, y, born: this.time });
+  }
+  /** Fish caught by a ripple's leading ring bolt outward with it. */
+  stepSplashes(dt) {
+    const { time } = this;
+    this.splashes = this.splashes.filter((sp) => time - sp.born < RIPPLE_LIFE);
+    for (const sp of this.splashes) {
+      const age = time - sp.born;
+      const front = age * RIPPLE_SPEED;
+      const k = (1 - age / RIPPLE_LIFE) * RIPPLE_PUSH * dt;
+      for (const f of this.fish) {
+        if (!f.alive) continue;
+        const dx = f.x - sp.x;
+        const dy = f.y - sp.y;
+        const d = Math.hypot(dx, dy);
+        if (d < 1e-3 || Math.abs(d - front) > RIPPLE_FRONT) continue;
+        f.vx += dx / d * k;
+        f.vy += dy / d * k;
+        f.alarm = 1;
+      }
     }
   }
   step(dt) {
     this.time += dt;
     this.rebuildHash();
+    this.stepSplashes(dt);
     this.stepFish(dt);
     this.stepSharks(dt);
     this.respawn();
@@ -682,6 +702,13 @@ const SHARK_COLORS = [
   [1.2, 0.72, 0.2],
   [0.3, 1.15, 0.5]
 ];
+const REFERENCE_GLYPH_SCALE = 0.6;
+function cellWidthFor(width, glyphScale) {
+  return clamp(Math.round(width / 124 * glyphScale), 2, 13);
+}
+function cellHeightFor(cellWidth) {
+  return Math.round(cellWidth * 1.45);
+}
 const ACCENTS = ["#e0892c", "#e03a32", "#b44ae0", "#33c8cc", "#3cb54a", "#3150e8", "#d9c14a"];
 const SKIN_RAMP = ":;t%SX8#@";
 const FIN_GLYPHS = "%;tS:";
@@ -933,6 +960,7 @@ class AsciiRenderer {
     /** Fish cells bucketed by brightness, so each bucket is one fillStyle. */
     __publicField(this, "fishBuckets", FISH_ALPHAS.map(() => []));
     __publicField(this, "fishStyles", FISH_ALPHAS.map((a) => `rgba(230,238,255,${a})`));
+    __publicField(this, "ripples", []);
     this.canvas = canvas2;
     const ctx = canvas2.getContext("2d", { alpha: false });
     if (!ctx) throw new Error("2D canvas unavailable");
@@ -969,7 +997,7 @@ class AsciiRenderer {
     this.height = height;
     this.dpr = dpr;
     this.cw = clamp(Math.round(width / 124 * this.glyphScale), 2, 13);
-    this.ch = Math.round(this.cw * 1.45);
+    this.ch = cellHeightFor(this.cw);
     this.cols = Math.ceil(width / this.cw);
     this.rows = Math.ceil(height / this.ch);
     this.canvas.width = Math.round(width * dpr);
@@ -1018,6 +1046,7 @@ class AsciiRenderer {
     if (cols === 0) return;
     const t2 = world.time;
     this.consumeEvents(world);
+    this.depositRipples(t2);
     this.rasterizeSharks(world.sharks, t2);
     this.depositWake(world);
     this.diffuse(dt);
@@ -1056,13 +1085,56 @@ class AsciiRenderer {
   consumeEvents(world) {
     for (const e of world.events) {
       if (e.kind === "eat") {
-        this.stamp(this.heat, e.x, e.y, 2, 1);
-        this.stamp(this.energy, e.x, e.y, 3, 0.9);
+        this.stamp(this.heat, e.x, e.y, this.cellsFor(18), 1);
+        this.stamp(this.energy, e.x, e.y, this.cellsFor(27), 0.9);
       } else {
-        this.stamp(this.energy, e.x, e.y, 6, 1.4);
+        this.stamp(this.energy, e.x, e.y, this.cellsFor(8), 1.2);
+        this.ripples.push({ x: e.x, y: e.y, born: world.time });
       }
     }
     world.events.length = 0;
+  }
+  /** A px radius in whole cells, so effects keep their size as glyphs shrink. */
+  cellsFor(px) {
+    return Math.max(1, Math.round(px / this.cw));
+  }
+  /**
+   * Each ripple is a few concentric rings spreading outward and fading.
+   * They light the wake field along a thin band, so the diffusion softens
+   * their trailing edge.
+   */
+  depositRipples(t2) {
+    const { cols, rows, cw, ch, energy } = this;
+    const band = Math.max(cw * 0.8, 3);
+    const gap = Math.max(10, cw * 1.8);
+    this.ripples = this.ripples.filter((rp) => t2 - rp.born < RIPPLE_LIFE);
+    for (const rp of this.ripples) {
+      const age = t2 - rp.born;
+      const fade = 1 - age / RIPPLE_LIFE;
+      const outer = age * RIPPLE_SPEED;
+      const reach = outer + band;
+      const c0 = clamp(Math.floor((rp.x - reach) / cw), 0, cols - 1);
+      const c1 = clamp(Math.floor((rp.x + reach) / cw), 0, cols - 1);
+      const r0 = clamp(Math.floor((rp.y - reach) / ch), 0, rows - 1);
+      const r1 = clamp(Math.floor((rp.y + reach) / ch), 0, rows - 1);
+      for (let r = r0; r <= r1; r++) {
+        const dy = (r + 0.5) * ch - rp.y;
+        for (let c = c0; c <= c1; c++) {
+          const d = Math.hypot((c + 0.5) * cw - rp.x, dy);
+          let v = 0;
+          for (let k = 0; k < RIPPLE_RINGS; k++) {
+            const radius = outer - k * gap;
+            if (radius <= 0) break;
+            const off = Math.abs(d - radius);
+            if (off < band) v = Math.max(v, (1 - off / band) * (1 - k * 0.3));
+          }
+          if (v > 0) {
+            const i = r * cols + c;
+            energy[i] = Math.max(energy[i], 0.45 + v * fade * 0.9);
+          }
+        }
+      }
+    }
   }
   depositWake(world) {
     const { energy } = this;
@@ -1567,7 +1639,8 @@ class OceanEngine {
     if (rect.width < 1 || rect.height < 1) return;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     this.renderer.resize(rect.width, rect.height, dpr);
-    this.world.resize(rect.width, rect.height, this.renderer.cellWidth, this.renderer.cellHeight);
+    const refW = cellWidthFor(rect.width, REFERENCE_GLYPH_SCALE);
+    this.world.resize(rect.width, rect.height, this.renderer.cellWidth, this.renderer.cellHeight, refW * cellHeightFor(refW));
     if (this.reducedMotion.matches) this.drawStill();
   }
   schedule() {

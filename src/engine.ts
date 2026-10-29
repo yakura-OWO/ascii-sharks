@@ -1,4 +1,4 @@
-import { AsciiRenderer } from "./renderer";
+import { AsciiRenderer, REFERENCE_GLYPH_SCALE, cellHeightFor, cellWidthFor } from "./renderer";
 import { World, type SharkSpec } from "./world";
 
 const STEP = 1 / 60;
@@ -74,7 +74,8 @@ export class OceanEngine {
     if (rect.width < 1 || rect.height < 1) return;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     this.renderer.resize(rect.width, rect.height, dpr);
-    this.world.resize(rect.width, rect.height, this.renderer.cellWidth, this.renderer.cellHeight);
+    const refW = cellWidthFor(rect.width, REFERENCE_GLYPH_SCALE);
+    this.world.resize(rect.width, rect.height, this.renderer.cellWidth, this.renderer.cellHeight, refW * cellHeightFor(refW));
     if (this.reducedMotion.matches) this.drawStill();
   }
 
