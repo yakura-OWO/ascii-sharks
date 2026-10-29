@@ -303,6 +303,9 @@ export class AsciiRenderer {
   private sharkDepth = new Float32Array(0);
   private sharkKind = new Uint8Array(0);
   private sharkColor = new Uint8Array(0);
+  private palette: ([number, number, number] | null)[] = [];
+  /** Scales the character cell; shapes are laid out in px, so sharks keep their size. */
+  glyphScale = 1;
   /** Cells darkened by a shark's shadow on the seabed. */
   private sharkShadow = new Uint8Array(0);
   private spine = new Float32Array(SHARK_NODES * 2);
@@ -353,13 +356,22 @@ export class AsciiRenderer {
     if (family) this.fontFamily = family;
   }
 
+  /** Per-shark colours as #rrggbb, indexed like the shark specs; null keeps the built-in tint. */
+  setSharkColors(colors: (string | null)[]) {
+    this.palette = colors.map((hex) => {
+      const m = hex ? /^#([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i.exec(hex) : null;
+      // Scaled past 1 so the brightest skin cells reach the picked colour.
+      return m ? ([1, 2, 3].map((k) => (parseInt(m[k], 16) / 255) * 1.3) as [number, number, number]) : null;
+    });
+  }
+
   resize(width: number, height: number, dpr: number) {
     const prevCols = this.cols;
     const prevRows = this.rows;
     this.width = width;
     this.height = height;
     this.dpr = dpr;
-    this.cw = clamp(Math.round(width / 124), 8, 13);
+    this.cw = clamp(Math.round((width / 124) * this.glyphScale), 5, 13);
     this.ch = Math.round(this.cw * 1.45);
     this.cols = Math.ceil(width / this.cw);
     this.rows = Math.ceil(height / this.ch);
@@ -743,7 +755,7 @@ export class AsciiRenderer {
           sharkKey[i] = key;
           sharkDepth[i] = sh.depth;
           sharkKind[i] = kindIndex;
-          this.sharkColor[i] = (sh.id - 1) % SHARK_COLORS.length;
+          this.sharkColor[i] = (sh.id - 1) & 255;
 
           if (centerHit && coverage >= 0.6) {
             sharkFlag[i] = flag;
@@ -775,8 +787,8 @@ export class AsciiRenderer {
       const shade = sharkShade[i];
       const dim = 0.7 + 0.3 * sharkDepth[i];
       const [sr, sg, sb] = SHAPES[KINDS[sharkKind[i]]].tint;
-      const [cr, cg, cb] = SHARK_COLORS[this.sharkColor[i]];
-      const [tr, tg, tb] = [sr * cr, sg * cg, sb * cb];
+      const [cr, cg, cb] = SHARK_COLORS[this.sharkColor[i] % SHARK_COLORS.length];
+      const [tr, tg, tb] = this.palette[this.sharkColor[i]] ?? [sr * cr, sg * cg, sb * cb];
 
       // Colours re-roll on a staggered clock so the hide shimmers.
       const tick = Math.floor(t * 2.4 + (key % 997) / 97);

@@ -20,9 +20,15 @@ export class OceanEngine {
   private intersectionObserver: IntersectionObserver;
   private disposed = false;
 
-  constructor(private canvas: HTMLCanvasElement, sharks?: SharkSpec[]) {
-    this.world = new World(sharks);
+  constructor(
+    private canvas: HTMLCanvasElement,
+    sharks?: SharkSpec[],
+    options: { fishScale?: number; sharkColors?: (string | null)[]; glyphScale?: number } = {},
+  ) {
+    this.world = new World(sharks, undefined, options.fishScale);
     this.renderer = new AsciiRenderer(canvas);
+    if (options.glyphScale) this.renderer.glyphScale = options.glyphScale;
+    if (options.sharkColors) this.renderer.setSharkColors(options.sharkColors);
     this.renderer.setFontFamily(getComputedStyle(canvas).fontFamily);
     this.reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
