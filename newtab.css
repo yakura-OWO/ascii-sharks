@@ -3,7 +3,7 @@
 :root{font-family:"Segoe UI",Arial,"Microsoft JhengHei",sans-serif;color:var(--text);background:var(--bg)}*{box-sizing:border-box}[hidden]{display:none!important}body{margin:0;min-height:100vh;background:var(--bg)}
 /* No text selection outside inputs: rapid clicks would select labels, and a press on a selection starts a native drag that grabs the mouse. */
 :not(input){-webkit-user-select:none;user-select:none}
-canvas{position:fixed;inset:0;width:100%;height:100%;font-family:Consolas,monospace;transition:filter .3s}[data-theme=light] canvas{filter:invert(1) hue-rotate(180deg)}
+canvas{position:fixed;inset:0;width:100%;height:100%;font-family:Consolas,monospace}
 a{color:inherit;text-decoration:none}button,input{font:inherit;color:inherit}button,a,input{outline-offset:4px}button{cursor:pointer}:focus-visible{outline:2px solid var(--accent)}
 
 .top{position:absolute;right:16px;top:12px;display:flex;align-items:center;gap:4px;font-size:13px;z-index:2}.top>a{padding:8px 10px;text-shadow:0 1px 4px var(--halo)}.top>a:hover{text-decoration:underline}.menu{position:relative}

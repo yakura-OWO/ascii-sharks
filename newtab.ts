@@ -43,7 +43,7 @@ document.querySelector<HTMLFormElement>("#search")!.addEventListener("submit", e
 // Ocean: rebuilt from scratch when its population changes; speed and theme apply live.
 type SharkSetting = { kind: SharkKind; size: number; color: string | null };
 type Theme = "light" | "dark" | "system";
-type Ocean = { sharks: SharkSetting[]; fishScale: number; glyphScale: number; speed: number; theme: Theme };
+type Ocean = { sharks: SharkSetting[]; fishScale: number; glyphScale: number; speed: number; shimmer: number; theme: Theme };
 const oceanKey = "ascii-sharks-ocean";
 const kinds: [SharkKind, string][] = (
   ["classic", "hammerhead", "greathammer", "tiger", "zebra", "mako", "thresher", "nurse"] as const
@@ -51,7 +51,7 @@ const kinds: [SharkKind, string][] = (
 // Rough look of the built-in tints, shown in the colour picker until one is chosen.
 const builtInColors = ["#3ad0e6", "#c25ae6", "#e6a038", "#4ad874"];
 const defaultOcean = (): Ocean => ({
-  sharks: DEFAULT_SHARKS.map(s => ({ ...s, color: null })), fishScale: 1, glyphScale: 0.6, speed: 1, theme: "dark",
+  sharks: DEFAULT_SHARKS.map(s => ({ ...s, color: null })), fishScale: 1, glyphScale: 0.6, speed: 1, shimmer: 0.3, theme: "dark",
 });
 let ocean = defaultOcean();
 let engine: OceanEngine | undefined;
@@ -63,7 +63,9 @@ function startOcean() {
     fishScale: ocean.fishScale,
     glyphScale: ocean.glyphScale,
     speed: ocean.speed,
+    shimmer: ocean.shimmer,
     sharkColors: ocean.sharks.map(s => s.color),
+    light: document.documentElement.dataset.theme === "light",
   });
 }
 function changeOcean(restart = true) {
@@ -78,6 +80,7 @@ function applyTheme() {
   try { localStorage.setItem("ascii-sharks-theme", ocean.theme); } catch { /* Only costs a flash. */ }
   const light = ocean.theme === "light" || (ocean.theme === "system" && lightQuery.matches);
   document.documentElement.dataset.theme = light ? "light" : "dark";
+  engine?.setLight(light);
 }
 lightQuery.addEventListener("change", applyTheme);
 for (const button of document.querySelectorAll<HTMLButtonElement>("[data-theme-choice]")) {
@@ -153,6 +156,7 @@ const sharkAdd = document.querySelector<HTMLButtonElement>("#shark-add")!;
 const sliders = [
   { id: "speed", get: () => ocean.speed, set: (v: number) => { ocean.speed = v; if (engine) engine.speed = v; return false; }, label: (v: number) => `${+v.toFixed(2)}×` },
   { id: "glyph-scale", get: () => ocean.glyphScale, set: (v: number) => { ocean.glyphScale = v; return true; }, label: (v: number) => `${Math.round(v * 100)}%` },
+  { id: "shimmer", get: () => ocean.shimmer, set: (v: number) => { ocean.shimmer = v; engine?.setShimmer(v); return false; }, label: (v: number) => `${Math.round(v * 100)}%` },
   { id: "fish-scale", get: () => ocean.fishScale, set: (v: number) => { ocean.fishScale = v; return true; }, label: (v: number) => `${Math.round(v * 100)}%` },
 ].map(s => ({
   ...s,
@@ -162,8 +166,8 @@ const sliders = [
 for (const s of sliders) {
   s.input.addEventListener("input", () => {
     s.output.textContent = s.label(Number(s.input.value));
-    // Speed is cheap to change, so it follows the thumb; the others rebuild the ocean on release.
-    if (s.id === "speed") s.set(Number(s.input.value));
+    // Speed and shimmer are cheap to change, so they follow the thumb; the others rebuild the ocean on release.
+    if (s.id === "speed" || s.id === "shimmer") s.set(Number(s.input.value));
   });
   s.input.addEventListener("change", () => changeOcean(s.set(Number(s.input.value))));
 }
@@ -228,6 +232,7 @@ load<Partial<Ocean>>(oceanKey).then(saved => {
       fishScale: num(saved.fishScale, base.fishScale),
       glyphScale: num(saved.glyphScale, base.glyphScale),
       speed: num(saved.speed, base.speed),
+      shimmer: num(saved.shimmer, base.shimmer),
       theme: saved.theme === "light" || saved.theme === "system" ? saved.theme : "dark",
     };
   }

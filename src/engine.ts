@@ -25,13 +25,15 @@ export class OceanEngine {
   constructor(
     private canvas: HTMLCanvasElement,
     sharks?: SharkSpec[],
-    options: { fishScale?: number; sharkColors?: (string | null)[]; glyphScale?: number; speed?: number } = {},
+    options: { fishScale?: number; sharkColors?: (string | null)[]; glyphScale?: number; speed?: number; light?: boolean; shimmer?: number } = {},
   ) {
     this.speed = options.speed ?? 1;
     this.world = new World(sharks, undefined, options.fishScale);
     this.renderer = new AsciiRenderer(canvas);
     if (options.glyphScale) this.renderer.glyphScale = options.glyphScale;
     if (options.sharkColors) this.renderer.setSharkColors(options.sharkColors);
+    if (options.light) this.renderer.setLight(true);
+    this.renderer.shimmer = options.shimmer ?? 0;
     this.renderer.setFontFamily(getComputedStyle(canvas).fontFamily);
     this.reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
@@ -55,6 +57,17 @@ export class OceanEngine {
       if (!this.disposed && this.reducedMotion.matches) this.drawStill();
     });
     this.schedule();
+  }
+
+  /** 0 calm … 1 the original busy sparkle; applies on the next frame. */
+  setShimmer(shimmer: number) {
+    this.renderer.shimmer = shimmer;
+  }
+
+  /** Switch between dark and light water without rebuilding the scene. */
+  setLight(light: boolean) {
+    this.renderer.setLight(light);
+    if (this.reducedMotion.matches) this.drawStill();
   }
 
   destroy() {
