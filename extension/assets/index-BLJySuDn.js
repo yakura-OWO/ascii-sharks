@@ -696,6 +696,7 @@ const DOT_RGB = [
 ];
 const DOT_BASE_ALPHA = [1, 1, 1, 1, 1];
 const WAKE = DOT_RGB.length - 1;
+const LIGHT_WAKE_RGB = [20, 110, 190];
 const SHARK_COLORS = [
   [0.25, 1.05, 1.2],
   [0.95, 0.4, 1.2],
@@ -709,7 +710,19 @@ function cellWidthFor(width, glyphScale) {
 function cellHeightFor(cellWidth) {
   return Math.round(cellWidth * 1.45);
 }
-const ACCENTS = ["#e0892c", "#e03a32", "#b44ae0", "#33c8cc", "#3cb54a", "#3150e8", "#d9c14a"];
+const GLINT_RATE = [0.03, 0.09];
+const SPARK_RATE = [0, 0.04];
+const EDGE_GLINT_RATE = [0.02, 0.07];
+const GLINT_HZ = [0.4, 2.4];
+const ACCENTS = [
+  [224, 137, 44],
+  [224, 58, 50],
+  [180, 74, 224],
+  [51, 200, 204],
+  [60, 181, 74],
+  [49, 80, 232],
+  [217, 193, 74]
+];
 const SKIN_RAMP = ":;t%SX8#@";
 const FIN_GLYPHS = "%;tS:";
 const RIDGE_GLYPHS = "@8%";
@@ -753,6 +766,15 @@ function reachNear(extent, s, pad) {
   let e = 0;
   for (let k = Math.max(0, b - pad); k <= Math.min(EXTENT_BINS - 1, b + pad); k++) e = Math.max(e, extent[k]);
   return e;
+}
+function byte(v) {
+  return Math.max(0, Math.min(255, Math.round(v)));
+}
+function lerp(a, b, k) {
+  return a + (b - a) * k;
+}
+function paleMix(tint, f) {
+  return lerp(Math.min(255, 140 * tint), 255, f);
 }
 const rgbCache = /* @__PURE__ */ new Map();
 function rgb(r, g, b) {
@@ -932,9 +954,9 @@ function inTriangle(px, py, ax, ay, bx, by, cx, cy) {
   const pos = d1 > 0 || d2 > 0 || d3 > 0;
   return !(neg && pos);
 }
-function paintGrid(g, W, H, cw, ch, dpr) {
+function paintGrid(g, W, H, cw, ch, dpr, color = "rgba(255,255,255,0.055)") {
   g.setTransform(1, 0, 0, 1, 0, 0);
-  g.strokeStyle = "rgba(255,255,255,0.055)";
+  g.strokeStyle = color;
   g.lineWidth = 1;
   g.beginPath();
   for (let c = 0; c <= Math.ceil(W / cw); c++) {
@@ -975,6 +997,8 @@ class AsciiRenderer {
     __publicField(this, "sharkFlag", new Uint8Array(0));
     __publicField(this, "sharkShade", new Float32Array(0));
     __publicField(this, "sharkKey", new Uint32Array(0));
+    /** Coarser body-anchored key that picks which skin patches glint. */
+    __publicField(this, "sharkPatch", new Uint32Array(0));
     __publicField(this, "sharkDepth", new Float32Array(0));
     __publicField(this, "sharkKind", new Uint8Array(0));
     __publicField(this, "sharkColor", new Uint8Array(0));
@@ -1008,22 +1032,39 @@ class AsciiRenderer {
     __publicField(this, "frameId", 0);
     /** Fish cells bucketed by brightness, so each bucket is one fillStyle. */
     __publicField(this, "fishBuckets", FISH_ALPHAS.map(() => []));
-    __publicField(this, "fishStyles", FISH_ALPHAS.map((a) => `rgba(230,238,255,${a})`));
+    __publicField(this, "fishStyles", []);
     /** A dash glyph only a few px tall renders faint, so tiny bars are dimmed to match. */
-    __publicField(this, "tinyFishStyles", FISH_ALPHAS.map((a) => `rgba(230,238,255,${(a * 0.33).toFixed(3)})`));
+    __publicField(this, "tinyFishStyles", []);
+    /** Light theme: white water with the same scene drawn in light-on-dark's place. */
+    __publicField(this, "light", false);
+    /** 0: calm glints in the shark's own colour … 1: the original busy multicolour sparkle. */
+    __publicField(this, "shimmer", 0);
     __publicField(this, "ripples", []);
     this.canvas = canvas2;
     const ctx = canvas2.getContext("2d", { alpha: false });
     if (!ctx) throw new Error("2D canvas unavailable");
     this.ctx = ctx;
     this.bg = document.createElement("canvas");
+    this.buildStyles();
+  }
+  setLight(light) {
+    if (light === this.light) return;
+    this.light = light;
+    this.buildStyles();
+    if (this.width) this.paintBackground();
+  }
+  buildStyles() {
+    this.dotStyles = [];
     for (let c = 0; c < DOT_RGB.length; c++) {
-      const [r, g, b] = DOT_RGB[c];
+      const [r, g, b] = this.light && c === WAKE ? LIGHT_WAKE_RGB : DOT_RGB[c];
       for (let l = 0; l < ALPHA_LEVELS; l++) {
         const a = DOT_BASE_ALPHA[c] * (l + 1) / ALPHA_LEVELS;
         this.dotStyles.push(`rgba(${r},${g},${b},${a.toFixed(3)})`);
       }
     }
+    const fish = this.light ? "20,28,40" : "230,238,255";
+    this.fishStyles = FISH_ALPHAS.map((a) => `rgba(${fish},${a})`);
+    this.tinyFishStyles = FISH_ALPHAS.map((a) => `rgba(${fish},${(a * 0.33).toFixed(3)})`);
   }
   get cellWidth() {
     return this.cw;
@@ -1068,6 +1109,7 @@ class AsciiRenderer {
       this.sharkFlag = new Uint8Array(n);
       this.sharkShade = new Float32Array(n);
       this.sharkKey = new Uint32Array(n);
+      this.sharkPatch = new Uint32Array(n);
       this.sharkDepth = new Float32Array(n);
       this.sharkKind = new Uint8Array(n);
       this.sharkColor = new Uint8Array(n);
@@ -1088,9 +1130,9 @@ class AsciiRenderer {
     if (!g) return;
     const { width: W, height: H, dpr, cw, ch } = this;
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    g.fillStyle = "#000";
+    g.fillStyle = this.light ? "#fff" : "#000";
     g.fillRect(0, 0, W, H);
-    paintGrid(g, W, H, cw, ch, dpr);
+    paintGrid(g, W, H, cw, ch, dpr, this.light ? "rgba(0,0,0,0.06)" : void 0);
   }
   render(world, dt) {
     const { ctx, dpr, cols, ch } = this;
@@ -1452,12 +1494,13 @@ class AsciiRenderer {
               const i = r * cols + c;
               const key2 = hash3(Math.round(s * 52), Math.round(v / (cw * 0.9)), sh.id) * 4294967295 >>> 0;
               sharkKey[i] = key2;
+              this.sharkPatch[i] = hash3(Math.round(s * L / (2 * cw)), Math.round(v / (2 * cw)), sh.id + 97) * 4294967295 >>> 0;
               sharkDepth[i] = sh.depth;
               sharkKind[i] = kindIndex;
               this.sharkColor[i] = sh.id - 1 & 255;
               if (centerHit && coverage >= 0.6) {
                 sharkFlag[i] = flag;
-                const flicker = (hash3(c, r, Math.floor(t2 * 6)) - 0.5) * 0.06;
+                const flicker = this.shimmer ? (hash3(c, r, Math.floor(t2 * 6)) - 0.5) * 0.06 * this.shimmer : 0;
                 sharkShade[i] = clamp(shade + flicker, 0, 1);
                 const sc = c + shadowDc;
                 const sr = r + shadowDr;
@@ -1473,8 +1516,14 @@ class AsciiRenderer {
     }
   }
   drawSharks(t2) {
-    const { ctx, cols, rows, cw, ch, sharkFlag, sharkShade, sharkKey, sharkDepth, sharkKind } = this;
+    const { ctx, cols, rows, cw, ch, sharkFlag, sharkShade, sharkKey, sharkPatch, sharkDepth, sharkKind, light } = this;
     const n = cols * rows;
+    const sh = this.shimmer;
+    const glintRate = lerp(GLINT_RATE[0], GLINT_RATE[1], sh);
+    const sparkRate = lerp(SPARK_RATE[0], SPARK_RATE[1], sh);
+    const edgeRate = lerp(EDGE_GLINT_RATE[0], EDGE_GLINT_RATE[1], sh);
+    const hz = lerp(GLINT_HZ[0], GLINT_HZ[1], sh);
+    const spark = light ? [27, 29, 36] : [255, 255, 255];
     const tiny = Math.round(ch * 0.74) < MIN_GLYPH_PX;
     for (let i = 0; i < n; i++) {
       const flag = sharkFlag[i];
@@ -1489,12 +1538,32 @@ class AsciiRenderer {
       const [sr, sg, sb] = SHAPES[KINDS[sharkKind[i]]].tint;
       const [cr, cg, cb] = SHARK_COLORS[this.sharkColor[i] % SHARK_COLORS.length];
       const [tr, tg, tb] = this.palette[this.sharkColor[i]] ?? [sr * cr, sg * cg, sb * cb];
-      const tick = Math.floor(t2 * 2.4 + key2 % 997 / 97);
-      const roll = hash3(key2, tick, 7);
+      const patch = sh >= 0.5 ? key2 : sharkPatch[i];
+      const phase = t2 * hz + patch % 997 / 97;
+      const tick = Math.floor(phase);
+      const roll = hash3(patch, tick, 7);
+      const glow = Math.round(lerp(Math.sin((phase - tick) * Math.PI), 1, sh) * 6) / 6;
+      let gr0, gg0, gb0;
+      if (hash3(patch, tick, 13) < sh) {
+        const k = light ? 0.6 : 1;
+        const a = ACCENTS[patch % ACCENTS.length];
+        [gr0, gg0, gb0] = [a[0] * k, a[1] * k, a[2] * k];
+      } else {
+        const gl = light ? 95 : 235;
+        [gr0, gg0, gb0] = [gl * tr, gl * tg, gl * tb];
+      }
       if (flag === FLAG_EDGE) {
         const set = shade >= 0.5 ? EDGE_HEAVY : EDGE_LIGHT;
-        const g = (70 + shade * 80) * dim;
-        ctx.fillStyle = roll < 0.07 ? ACCENTS[key2 % ACCENTS.length] : rgb(Math.round(g * tr), Math.round(g * tg), Math.min(255, Math.round(g * tb + 6)));
+        let r, g, b;
+        if (light) {
+          const f = 1 - (1 - (0.72 - 0.32 * shade)) * dim;
+          [r, g, b] = [paleMix(tr, f), paleMix(tg, f), paleMix(tb, f)];
+        } else {
+          const v = (70 + shade * 80) * dim;
+          [r, g, b] = [v * tr, v * tg, v * tb + 6];
+        }
+        if (roll < edgeRate && glow > 0) [r, g, b] = [lerp(r, gr0, glow), lerp(g, gg0, glow), lerp(b, gb0, glow)];
+        ctx.fillStyle = rgb(byte(r), byte(g), byte(b));
         ctx.fillText(set[(key2 >>> 8) % set.length], x + cw / 2, y + ch / 2 + 1);
         continue;
       }
@@ -1514,20 +1583,36 @@ class AsciiRenderer {
         glyph = FIN_GLYPHS[(key2 >>> 8) % FIN_GLYPHS.length];
       } else {
         level = 46 + shade * 160;
-        const jitter = (key2 >>> 4) % 3 - 1;
+        const jitter = (patch >>> 4) % 3 - 1;
         glyph = SKIN_RAMP[clamp(Math.floor((1 - shade) * 8.99) + jitter, 0, SKIN_RAMP.length - 1)];
       }
-      level *= tiny ? dim * 0.92 : dim;
-      ctx.fillStyle = rgb(Math.min(255, Math.round(level * tr)), Math.min(255, Math.round(level * tg)), Math.min(255, Math.round(level * tb + 4)));
+      let br, bg, bb;
+      if (light) {
+        const f = 1 - (1 - 0.6 * Math.min(1, level / 226)) * dim;
+        [br, bg, bb] = [paleMix(tr, f), paleMix(tg, f), paleMix(tb, f)];
+      } else {
+        const lv = level * (tiny ? dim * 0.92 : dim);
+        [br, bg, bb] = [lv * tr, lv * tg, lv * tb + 4];
+      }
+      ctx.fillStyle = rgb(byte(br), byte(bg), byte(bb));
       ctx.fillRect(x + 1, y + 1, cw - 1, ch - 1);
-      let color;
-      if (flag === FLAG_EYE) color = "#9aa0ad";
-      else if (flag === FLAG_MARK) color = rgb(Math.round(70 * tr), Math.round(70 * tg), Math.round(70 * tb));
-      else if (roll < 0.09) color = ACCENTS[key2 % ACCENTS.length];
-      else if (roll < 0.13) color = "#ffffff";
-      else if (tiny) continue;
-      else color = shade > 0.55 ? "#0e0f13" : "#1b1d24";
-      ctx.fillStyle = color;
+      let gr, gg, gb;
+      if (flag === FLAG_EYE) {
+        [gr, gg, gb] = light ? [222, 226, 234] : [154, 160, 173];
+      } else if (flag === FLAG_MARK) {
+        [gr, gg, gb] = light ? [br * 0.7, bg * 0.7, bb * 0.7] : [70 * tr, 70 * tg, 70 * tb];
+      } else if (roll < glintRate + sparkRate && glow > 0) {
+        const [qr, qg, qb] = light ? [br * 0.82, bg * 0.82, bb * 0.82] : shade > 0.55 ? [14, 15, 19] : [27, 29, 36];
+        const [pr, pg, pb] = roll < glintRate ? [gr0, gg0, gb0] : spark;
+        [gr, gg, gb] = [lerp(qr, pr, glow), lerp(qg, pg, glow), lerp(qb, pb, glow)];
+      } else if (tiny) {
+        continue;
+      } else if (light) {
+        [gr, gg, gb] = [br * 0.82, bg * 0.82, bb * 0.82];
+      } else {
+        [gr, gg, gb] = shade > 0.55 ? [14, 15, 19] : [27, 29, 36];
+      }
+      ctx.fillStyle = rgb(byte(gr), byte(gg), byte(gb));
       ctx.fillText(glyph, x + cw / 2, y + ch / 2 + 1);
     }
   }
@@ -1697,6 +1782,8 @@ class OceanEngine {
     this.renderer = new AsciiRenderer(canvas2);
     if (options.glyphScale) this.renderer.glyphScale = options.glyphScale;
     if (options.sharkColors) this.renderer.setSharkColors(options.sharkColors);
+    if (options.light) this.renderer.setLight(true);
+    this.renderer.shimmer = options.shimmer ?? 0;
     this.renderer.setFontFamily(getComputedStyle(canvas2).fontFamily);
     this.reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
     this.resizeObserver = new ResizeObserver(() => this.resize());
@@ -1716,6 +1803,15 @@ class OceanEngine {
       if (!this.disposed && this.reducedMotion.matches) this.drawStill();
     });
     this.schedule();
+  }
+  /** 0 calm … 1 the original busy sparkle; applies on the next frame. */
+  setShimmer(shimmer) {
+    this.renderer.shimmer = shimmer;
+  }
+  /** Switch between dark and light water without rebuilding the scene. */
+  setLight(light) {
+    this.renderer.setLight(light);
+    if (this.reducedMotion.matches) this.drawStill();
   }
   destroy() {
     this.disposed = true;
@@ -1783,6 +1879,7 @@ const en = {
   swimSpeed: "Swim speed",
   glyphSize: "Character size",
   fishAmount: "Fish amount",
+  shimmer: "Shimmer",
   sharks: "Sharks",
   add: "Add",
   resetDefaults: "Reset to defaults",
@@ -1846,6 +1943,7 @@ const zh = {
   swimSpeed: "游動速度",
   glyphSize: "字元大小",
   fishAmount: "小魚數量",
+  shimmer: "閃爍程度",
   sharks: "鯊魚",
   add: "新增",
   resetDefaults: "恢復預設",
@@ -1958,6 +2056,7 @@ const defaultOcean = () => ({
   fishScale: 1,
   glyphScale: 0.6,
   speed: 1,
+  shimmer: 0.3,
   theme: "dark"
 });
 let ocean = defaultOcean();
@@ -1969,7 +2068,9 @@ function startOcean() {
     fishScale: ocean.fishScale,
     glyphScale: ocean.glyphScale,
     speed: ocean.speed,
-    sharkColors: ocean.sharks.map((s) => s.color)
+    shimmer: ocean.shimmer,
+    sharkColors: ocean.sharks.map((s) => s.color),
+    light: document.documentElement.dataset.theme === "light"
   });
 }
 function changeOcean(restart = true) {
@@ -1985,6 +2086,7 @@ function applyTheme() {
   }
   const light = ocean.theme === "light" || ocean.theme === "system" && lightQuery.matches;
   document.documentElement.dataset.theme = light ? "light" : "dark";
+  engine == null ? void 0 : engine.setLight(light);
 }
 lightQuery.addEventListener("change", applyTheme);
 for (const button of document.querySelectorAll("[data-theme-choice]")) {
@@ -2074,6 +2176,11 @@ const sliders = [
     ocean.glyphScale = v;
     return true;
   }, label: (v) => `${Math.round(v * 100)}%` },
+  { id: "shimmer", get: () => ocean.shimmer, set: (v) => {
+    ocean.shimmer = v;
+    engine == null ? void 0 : engine.setShimmer(v);
+    return false;
+  }, label: (v) => `${Math.round(v * 100)}%` },
   { id: "fish-scale", get: () => ocean.fishScale, set: (v) => {
     ocean.fishScale = v;
     return true;
@@ -2086,7 +2193,7 @@ const sliders = [
 for (const s of sliders) {
   s.input.addEventListener("input", () => {
     s.output.textContent = s.label(Number(s.input.value));
-    if (s.id === "speed") s.set(Number(s.input.value));
+    if (s.id === "speed" || s.id === "shimmer") s.set(Number(s.input.value));
   });
   s.input.addEventListener("change", () => changeOcean(s.set(Number(s.input.value))));
 }
@@ -2172,6 +2279,7 @@ load(oceanKey).then((saved) => {
       fishScale: num(saved.fishScale, base.fishScale),
       glyphScale: num(saved.glyphScale, base.glyphScale),
       speed: num(saved.speed, base.speed),
+      shimmer: num(saved.shimmer, base.shimmer),
       theme: saved.theme === "light" || saved.theme === "system" ? saved.theme : "dark"
     };
   }

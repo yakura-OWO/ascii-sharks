@@ -22,6 +22,7 @@ const DOT_RGB: [number, number, number][] = [
 ];
 const DOT_BASE_ALPHA = [1, 1, 1, 1, 1];
 const WAKE = DOT_RGB.length - 1;
+const LIGHT_WAKE_RGB: [number, number, number] = [20, 110, 190];
 
 // Stable per-shark colours: cyan, violet, amber, green.
 const SHARK_COLORS: [number, number, number][] = [
@@ -42,7 +43,23 @@ export function cellHeightFor(cellWidth: number) {
   return Math.round(cellWidth * 1.45);
 }
 
-const ACCENTS = ["#e0892c", "#e03a32", "#b44ae0", "#33c8cc", "#3cb54a", "#3150e8", "#d9c14a"];
+// A few skin patches catch the light now and then, fading in and out in the
+// shark's own colour. Patches span ~2 cells so a glint survives the swim.
+// The shimmer setting blends toward the busier original: more glints, random
+// accent colours and white sparks that snap on and off, and a per-cell flicker.
+const GLINT_RATE = [0.03, 0.09];
+const SPARK_RATE = [0, 0.04];
+const EDGE_GLINT_RATE = [0.02, 0.07];
+const GLINT_HZ = [0.4, 2.4];
+const ACCENTS: [number, number, number][] = [
+  [224, 137, 44],
+  [224, 58, 50],
+  [180, 74, 224],
+  [51, 200, 204],
+  [60, 181, 74],
+  [49, 80, 232],
+  [217, 193, 74],
+];
 
 // Sparse glyphs on bright skin, dense glyphs in shadow, so the texture
 // reinforces the shading instead of fighting it.
@@ -103,6 +120,19 @@ function reachNear(extent: Float32Array, s: number, pad: number) {
   let e = 0;
   for (let k = Math.max(0, b - pad); k <= Math.min(EXTENT_BINS - 1, b + pad); k++) e = Math.max(e, extent[k]);
   return e;
+}
+
+function byte(v: number) {
+  return Math.max(0, Math.min(255, Math.round(v)));
+}
+
+function lerp(a: number, b: number, k: number) {
+  return a + (b - a) * k;
+}
+
+/** One channel of a tint (≈0–1.3) washed toward white by f (0 = mid tone, 1 = white). */
+function paleMix(tint: number, f: number) {
+  return lerp(Math.min(255, 140 * tint), 255, f);
 }
 
 const rgbCache = new Map<number, string>();
@@ -322,9 +352,17 @@ function inTriangle(
 }
 
 /** Visible dark-grey cell grid, snapped to device pixels. Shared with the sidebar backdrop. */
-export function paintGrid(g: CanvasRenderingContext2D, W: number, H: number, cw: number, ch: number, dpr: number) {
+export function paintGrid(
+  g: CanvasRenderingContext2D,
+  W: number,
+  H: number,
+  cw: number,
+  ch: number,
+  dpr: number,
+  color = "rgba(255,255,255,0.055)",
+) {
   g.setTransform(1, 0, 0, 1, 0, 0);
-  g.strokeStyle = "rgba(255,255,255,0.055)";
+  g.strokeStyle = color;
   g.lineWidth = 1;
   g.beginPath();
   for (let c = 0; c <= Math.ceil(W / cw); c++) {
@@ -366,6 +404,8 @@ export class AsciiRenderer {
   private sharkFlag = new Uint8Array(0);
   private sharkShade = new Float32Array(0);
   private sharkKey = new Uint32Array(0);
+  /** Coarser body-anchored key that picks which skin patches glint. */
+  private sharkPatch = new Uint32Array(0);
   private sharkDepth = new Float32Array(0);
   private sharkKind = new Uint8Array(0);
   private sharkColor = new Uint8Array(0);
@@ -400,9 +440,13 @@ export class AsciiRenderer {
   private frameId = 0;
   /** Fish cells bucketed by brightness, so each bucket is one fillStyle. */
   private fishBuckets: number[][] = FISH_ALPHAS.map(() => []);
-  private fishStyles = FISH_ALPHAS.map((a) => `rgba(230,238,255,${a})`);
+  private fishStyles: string[] = [];
   /** A dash glyph only a few px tall renders faint, so tiny bars are dimmed to match. */
-  private tinyFishStyles = FISH_ALPHAS.map((a) => `rgba(230,238,255,${(a * 0.33).toFixed(3)})`);
+  private tinyFishStyles: string[] = [];
+  /** Light theme: white water with the same scene drawn in light-on-dark's place. */
+  private light = false;
+  /** 0: calm glints in the shark's own colour … 1: the original busy multicolour sparkle. */
+  shimmer = 0;
   private ripples: { x: number; y: number; born: number }[] = [];
 
   constructor(private canvas: HTMLCanvasElement) {
@@ -410,14 +454,29 @@ export class AsciiRenderer {
     if (!ctx) throw new Error("2D canvas unavailable");
     this.ctx = ctx;
     this.bg = document.createElement("canvas");
+    this.buildStyles();
+  }
 
+  setLight(light: boolean) {
+    if (light === this.light) return;
+    this.light = light;
+    this.buildStyles();
+    if (this.width) this.paintBackground();
+  }
+
+  private buildStyles() {
+    this.dotStyles = [];
     for (let c = 0; c < DOT_RGB.length; c++) {
-      const [r, g, b] = DOT_RGB[c];
+      // On white water the wake is a deeper blue so it still reads.
+      const [r, g, b] = this.light && c === WAKE ? LIGHT_WAKE_RGB : DOT_RGB[c];
       for (let l = 0; l < ALPHA_LEVELS; l++) {
         const a = (DOT_BASE_ALPHA[c] * (l + 1)) / ALPHA_LEVELS;
         this.dotStyles.push(`rgba(${r},${g},${b},${a.toFixed(3)})`);
       }
     }
+    const fish = this.light ? "20,28,40" : "230,238,255";
+    this.fishStyles = FISH_ALPHAS.map((a) => `rgba(${fish},${a})`);
+    this.tinyFishStyles = FISH_ALPHAS.map((a) => `rgba(${fish},${(a * 0.33).toFixed(3)})`);
   }
 
   get cellWidth() {
@@ -470,6 +529,7 @@ export class AsciiRenderer {
       this.sharkFlag = new Uint8Array(n);
       this.sharkShade = new Float32Array(n);
       this.sharkKey = new Uint32Array(n);
+      this.sharkPatch = new Uint32Array(n);
       this.sharkDepth = new Float32Array(n);
       this.sharkKind = new Uint8Array(n);
       this.sharkColor = new Uint8Array(n);
@@ -493,9 +553,9 @@ export class AsciiRenderer {
     if (!g) return;
     const { width: W, height: H, dpr, cw, ch } = this;
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    g.fillStyle = "#000";
+    g.fillStyle = this.light ? "#fff" : "#000";
     g.fillRect(0, 0, W, H);
-    paintGrid(g, W, H, cw, ch, dpr);
+    paintGrid(g, W, H, cw, ch, dpr, this.light ? "rgba(0,0,0,0.06)" : undefined);
   }
 
   render(world: World, dt: number) {
@@ -918,13 +978,14 @@ export class AsciiRenderer {
               // Body-anchored key so each glyph rides along with the skin.
               const key = (hash3(Math.round(s * 52), Math.round(v / (cw * 0.9)), sh.id) * 4294967295) >>> 0;
               sharkKey[i] = key;
+              this.sharkPatch[i] = (hash3(Math.round((s * L) / (2 * cw)), Math.round(v / (2 * cw)), sh.id + 97) * 4294967295) >>> 0;
               sharkDepth[i] = sh.depth;
               sharkKind[i] = kindIndex;
               this.sharkColor[i] = (sh.id - 1) & 255;
     
               if (centerHit && coverage >= 0.6) {
                 sharkFlag[i] = flag;
-                const flicker = (hash3(c, r, Math.floor(t * 6)) - 0.5) * 0.06;
+                const flicker = this.shimmer ? (hash3(c, r, Math.floor(t * 6)) - 0.5) * 0.06 * this.shimmer : 0;
                 sharkShade[i] = clamp(shade + flicker, 0, 1);
                 const sc = c + shadowDc;
                 const sr = r + shadowDr;
@@ -941,10 +1002,17 @@ export class AsciiRenderer {
   }
 
   private drawSharks(t: number) {
-    const { ctx, cols, rows, cw, ch, sharkFlag, sharkShade, sharkKey, sharkDepth, sharkKind } = this;
+    const { ctx, cols, rows, cw, ch, sharkFlag, sharkShade, sharkKey, sharkPatch, sharkDepth, sharkKind, light } = this;
     const n = cols * rows;
+    const sh = this.shimmer;
+    const glintRate = lerp(GLINT_RATE[0], GLINT_RATE[1], sh);
+    const sparkRate = lerp(SPARK_RATE[0], SPARK_RATE[1], sh);
+    const edgeRate = lerp(EDGE_GLINT_RATE[0], EDGE_GLINT_RATE[1], sh);
+    const hz = lerp(GLINT_HZ[0], GLINT_HZ[1], sh);
+    // A white spark is a dark fleck on light water, as the old inverted canvas showed.
+    const spark = light ? [27, 29, 36] : [255, 255, 255];
     // At tiny sizes the dark skin glyphs barely show over their block, so
-    // only the bright ones (edges, accents, eyes) are still drawn as text.
+    // only the bright ones (edges, glints, eyes) are still drawn as text.
     const tiny = Math.round(ch * 0.74) < MIN_GLYPH_PX;
     for (let i = 0; i < n; i++) {
       const flag = sharkFlag[i];
@@ -960,18 +1028,40 @@ export class AsciiRenderer {
       const [cr, cg, cb] = SHARK_COLORS[this.sharkColor[i] % SHARK_COLORS.length];
       const [tr, tg, tb] = this.palette[this.sharkColor[i]] ?? [sr * cr, sg * cg, sb * cb];
 
-      // Colours re-roll on a staggered clock so the hide shimmers.
-      const tick = Math.floor(t * 2.4 + (key % 997) / 97);
-      const roll = hash3(key, tick, 7);
+      // Glints rise and fade on a staggered clock. Past half shimmer they key off
+      // single cells again, so the hide sparkles cell by cell as it used to.
+      const patch = sh >= 0.5 ? key : sharkPatch[i];
+      const phase = t * hz + (patch % 997) / 97;
+      const tick = Math.floor(phase);
+      const roll = hash3(patch, tick, 7);
+      // Calm glints fade in and out; at full shimmer they snap on and off.
+      const glow = Math.round(lerp(Math.sin((phase - tick) * Math.PI), 1, sh) * 6) / 6;
+      // Glint colour: usually a brighter tone of the shark's tint (a deeper one on
+      // light water); with more shimmer, more of them take a random accent instead.
+      let gr0: number, gg0: number, gb0: number;
+      if (hash3(patch, tick, 13) < sh) {
+        const k = light ? 0.6 : 1;
+        const a = ACCENTS[patch % ACCENTS.length];
+        [gr0, gg0, gb0] = [a[0] * k, a[1] * k, a[2] * k];
+      } else {
+        const gl = light ? 95 : 235;
+        [gr0, gg0, gb0] = [gl * tr, gl * tg, gl * tb];
+      }
 
       if (flag === FLAG_EDGE) {
         // Soft, anti-aliased silhouette: no block, just a light glyph.
         const set = shade >= 0.5 ? EDGE_HEAVY : EDGE_LIGHT;
-        const g = (70 + shade * 80) * dim;
-        ctx.fillStyle =
-          roll < 0.07
-            ? ACCENTS[key % ACCENTS.length]
-            : rgb(Math.round(g * tr), Math.round(g * tg), Math.min(255, Math.round(g * tb + 6)));
+        let r: number, g: number, b: number;
+        if (light) {
+          // Fade toward white: low coverage stays pale.
+          const f = 1 - (1 - (0.72 - 0.32 * shade)) * dim;
+          [r, g, b] = [paleMix(tr, f), paleMix(tg, f), paleMix(tb, f)];
+        } else {
+          const v = (70 + shade * 80) * dim;
+          [r, g, b] = [v * tr, v * tg, v * tb + 6];
+        }
+        if (roll < edgeRate && glow > 0) [r, g, b] = [lerp(r, gr0, glow), lerp(g, gg0, glow), lerp(b, gb0, glow)];
+        ctx.fillStyle = rgb(byte(r), byte(g), byte(b));
         ctx.fillText(set[(key >>> 8) % set.length], x + cw / 2, y + ch / 2 + 1);
         continue;
       }
@@ -992,23 +1082,44 @@ export class AsciiRenderer {
         glyph = FIN_GLYPHS[(key >>> 8) % FIN_GLYPHS.length];
       } else {
         level = 46 + shade * 160;
-        const jitter = ((key >>> 4) % 3) - 1;
+        const jitter = ((patch >>> 4) % 3) - 1;
         glyph = SKIN_RAMP[clamp(Math.floor((1 - shade) * 8.99) + jitter, 0, SKIN_RAMP.length - 1)];
       }
-      // Tiny cells skip their dark glyph; dim the block slightly to keep the same tone.
-      level *= tiny ? dim * 0.92 : dim;
-      // Tinted per species; the classic tint is a cool blue-grey, like a back seen through deep water.
-      ctx.fillStyle = rgb(Math.min(255, Math.round(level * tr)), Math.min(255, Math.round(level * tg)), Math.min(255, Math.round(level * tb + 4)));
+
+      // Block colour. Dark water: the tint scaled by the light level, so the back
+      // glows and the flanks fall into shadow. Light water: the same light level
+      // picks how far the tint is washed toward white, keeping the back brightest.
+      let br: number, bg: number, bb: number;
+      if (light) {
+        const f = 1 - (1 - 0.6 * Math.min(1, level / 226)) * dim;
+        [br, bg, bb] = [paleMix(tr, f), paleMix(tg, f), paleMix(tb, f)];
+      } else {
+        // Tiny cells skip their dark glyph; dim the block slightly to keep the same tone.
+        const lv = level * (tiny ? dim * 0.92 : dim);
+        // Tinted per species; the classic tint is a cool blue-grey, like a back seen through deep water.
+        [br, bg, bb] = [lv * tr, lv * tg, lv * tb + 4];
+      }
+      ctx.fillStyle = rgb(byte(br), byte(bg), byte(bb));
       ctx.fillRect(x + 1, y + 1, cw - 1, ch - 1);
 
-      let color: string;
-      if (flag === FLAG_EYE) color = "#9aa0ad";
-      else if (flag === FLAG_MARK) color = rgb(Math.round(70 * tr), Math.round(70 * tg), Math.round(70 * tb));
-      else if (roll < 0.09) color = ACCENTS[key % ACCENTS.length];
-      else if (roll < 0.13) color = "#ffffff";
-      else if (tiny) continue;
-      else color = shade > 0.55 ? "#0e0f13" : "#1b1d24";
-      ctx.fillStyle = color;
+      let gr: number, gg: number, gb: number;
+      if (flag === FLAG_EYE) {
+        [gr, gg, gb] = light ? [222, 226, 234] : [154, 160, 173];
+      } else if (flag === FLAG_MARK) {
+        [gr, gg, gb] = light ? [br * 0.7, bg * 0.7, bb * 0.7] : [70 * tr, 70 * tg, 70 * tb];
+      } else if (roll < glintRate + sparkRate && glow > 0) {
+        // Glyphs are a shade off their block, so the glint blends up from there.
+        const [qr, qg, qb] = light ? [br * 0.82, bg * 0.82, bb * 0.82] : shade > 0.55 ? [14, 15, 19] : [27, 29, 36];
+        const [pr, pg, pb] = roll < glintRate ? [gr0, gg0, gb0] : spark;
+        [gr, gg, gb] = [lerp(qr, pr, glow), lerp(qg, pg, glow), lerp(qb, pb, glow)];
+      } else if (tiny) {
+        continue;
+      } else if (light) {
+        [gr, gg, gb] = [br * 0.82, bg * 0.82, bb * 0.82];
+      } else {
+        [gr, gg, gb] = shade > 0.55 ? [14, 15, 19] : [27, 29, 36];
+      }
+      ctx.fillStyle = rgb(byte(gr), byte(gg), byte(gb));
       ctx.fillText(glyph, x + cw / 2, y + ch / 2 + 1);
     }
   }
